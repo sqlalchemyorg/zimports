@@ -10,20 +10,22 @@ import pkgutil
 import re
 
 
-def _do_thing(filename, local_module):
+def _do_thing(filename, source_lines, local_module):
 
     # parse the code.  get the imports and a collection of line numbers
     # we definitely don't want to discard
-    imports, _, lines_with_code = _parse_toplevel_imports(filename)
+    imports, _, lines_with_code = _parse_toplevel_imports(
+        filename, source_lines)
 
     # get line numbers that represent parts of a multiline import statement,
     # based on the gaps between the import nodes and the lines_with_code
     import_gap_lines = _get_import_discard_lines(
-        filename, imports, lines_with_code)
+        filename, source_lines, imports, lines_with_code)
 
     imports = list(_as_single_imports(imports))
 
-    on_singleline = _write_imports(filename, [imports], import_gap_lines)
+    on_singleline = _write_imports(
+        filename, source_lines, [imports], import_gap_lines)
 
     imports, warnings, lines_with_code = _parse_toplevel_imports(
         filename, on_singleline)
@@ -45,12 +47,13 @@ def _do_thing(filename, local_module):
     stdlib, package, locals_ = _get_import_groups(imports, local_module)
 
     done = _write_imports(
-        filename, [stdlib, package, locals_], import_gap_lines)
+        filename, source_lines, [stdlib, package, locals_], import_gap_lines)
 
-    print done
+    print "\n".join(done)
 
 
-def _get_import_discard_lines(filename, imports, lines_with_code):
+def _get_import_discard_lines(
+        filename, source_lines, imports, lines_with_code):
     """get extra lines that are part of imports but not in the AST.
 
     E.g.::
@@ -68,20 +71,17 @@ def _get_import_discard_lines(filename, imports, lines_with_code):
 
 
     """
-    with open(filename) as file_:
-        file_lines = list(file_)
-
     import_gap_lines = {node.lineno for node in imports}
 
     prev = None
-    for lineno in [node.lineno for node in imports] + [len(file_lines)]:
+    for lineno in [node.lineno for node in imports] + [len(source_lines)]:
         if prev is not None:
             for gap in range(prev + 1, lineno):
                 if gap in lines_with_code:
                     # a codeline is here, so we definitely
                     # are not in an import anymore, go to the next one
                     break
-                elif not _is_whitespace_or_comment(file_lines[gap - 1]):
+                elif not _is_whitespace_or_comment(source_lines[gap - 1]):
                     import_gap_lines.add(gap)
         prev = lineno
 
@@ -95,25 +95,24 @@ def _is_whitespace_or_comment(line):
     )
 
 
-def _write_imports(filename, grouped_imports, import_gap_lines):
+def _write_imports(filename, source_lines, grouped_imports, import_gap_lines):
     imports_start_on = min(
         import_node.lineno
         for group in grouped_imports for import_node in group)
 
     buf = []
-    with open(filename) as file_:
-        for lineno, line in enumerate(file_, 1):
-            if lineno == imports_start_on:
-                for imports in grouped_imports:
-                    buf.extend(
-                        _write_singlename_import(import_node)
-                        for import_node in imports
-                    )
-                    buf.append("")
+    for lineno, line in enumerate(source_lines, 1):
+        if lineno == imports_start_on:
+            for imports in grouped_imports:
+                buf.extend(
+                    _write_singlename_import(import_node)
+                    for import_node in imports
+                )
+                buf.append("")
 
-            if lineno not in import_gap_lines:
-                buf.append(line.rstrip())
-    return "\n".join(buf)
+        if lineno not in import_gap_lines:
+            buf.append(line.rstrip())
+    return buf
 
 
 def _write_singlename_import(import_node):
@@ -130,10 +129,8 @@ def _write_singlename_import(import_node):
             if name.asname else name.name)
 
 
-def _parse_toplevel_imports(filename, source=None):
-    if source is None:
-        with open(filename) as file_:
-            source = file_.read()
+def _parse_toplevel_imports(filename, source_lines):
+    source = "\n".join(source_lines)
 
     tree = ast.parse(source, filename)
 
@@ -268,7 +265,9 @@ def main(argv=None):
 
     _get_stdlib_names()
     for filename in options.filename:
-        _do_thing(filename, options.module)
+        with open(filename) as file_:
+            source_lines = [line.rstrip() for line in file_]
+        _do_thing(filename, source_lines, options.module)
 
 if __name__ == '__main__':
     main()
