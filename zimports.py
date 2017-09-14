@@ -89,16 +89,27 @@ def _write_source(filename, source_lines, grouped_imports, import_gap_lines):
     imports_start_on = min(lineno) if lineno else -1
 
     buf = []
+    added_imports = False
     for lineno, line in enumerate(source_lines, 1):
         if lineno == imports_start_on:
-            for imports in grouped_imports:
+            for j, imports in enumerate(grouped_imports):
                 buf.extend(
                     _write_singlename_import(import_node)
                     for import_node in imports
                 )
-                #buf.append("")
+                if imports:
+                    added_imports = True
+                    buf.append("")
 
         if lineno not in import_gap_lines:
+            # if we just added imports, suppress whitespace
+            # until we get to a line
+            if added_imports:
+                if not line.rstrip():
+                    continue
+                else:
+                    added_imports = False
+
             buf.append(line.rstrip())
     return buf
 
