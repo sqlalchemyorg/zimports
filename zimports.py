@@ -197,46 +197,37 @@ def _as_single_imports(import_nodes):
                 )
 
 
-def _generate_sort_keys(import_nodes):
-    for import_node in import_nodes:
-        assert len(import_node.names) == 1
-        name = import_node.names[0]
-        if isinstance(import_node, ast.Import):
-            import_node._sort_key = (name.name, )
-        elif isinstance(import_node, ast.ImportFrom):
-            import_node._sort_key = (
-                tuple(import_node.module.split("."))
-                if import_node.module else ()
-            ) + (name.name, )
-
-
 def _get_import_groups(imports, local_module):
     stdlib = set()
     package = set()
     locals_ = set()
 
-    _generate_sort_keys(imports)
-
     for import_node in imports:
-        if isinstance(import_node, ast.ImportFrom) and (
-            import_node.module is None or
-            local_module and import_node.module.startswith(local_module)
-        ):
-            locals_.add(import_node)
-        elif isinstance(import_node, ast.Import) and (
+        assert len(import_node.names) == 1
+        name = import_node.names[0].name
 
-            local_module and import_node.names[0].name.startswith(local_module)
-        ):
-            locals_.add(import_node)
-
-        elif isinstance(import_node, ast.ImportFrom) and \
-                _is_std_lib(import_node.module):
-            stdlib.add(import_node)
-        elif isinstance(import_node, ast.Import) and \
-                _is_std_lib(import_node.names[0].name):
-            stdlib.add(import_node)
+        if isinstance(import_node, ast.ImportFrom):
+            module = import_node.module
+            if not module or (
+                    local_module and
+                    module.startswith(local_module)):
+                locals_.add(import_node)
+            elif module and _is_std_lib(module):
+                stdlib.add(import_node)
+            else:
+                package.add(import_node)
+            import_node._sort_key = (
+                tuple(module.split(".")) if module else ()) + (name, )
         else:
-            package.add(import_node)
+            if local_module and \
+                    name.startswith(local_module):
+                locals_.add(import_node)
+            elif _is_std_lib(name):
+                stdlib.add(import_node)
+            else:
+                package.add(import_node)
+
+            import_node._sort_key = (name, )
 
     stdlib = sorted(stdlib, key=lambda n: n._sort_key)
     package = sorted(package, key=lambda n: n._sort_key)
