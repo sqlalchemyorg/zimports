@@ -10,11 +10,12 @@ import difflib
 import glob
 import pkgutil
 import re
+import time
 
 
 def _rewrite_source(filename, source_lines, local_module):
 
-    stats = {}
+    stats = {"starttime": time.time()}
 
     # parse the code.  get the imports and a collection of line numbers
     # we definitely don't want to discard
@@ -55,6 +56,7 @@ def _rewrite_source(filename, source_lines, local_module):
     stats['added'] = len([l for l in differ if l.startswith('+ ')])
     stats['removed'] = len([l for l in differ if l.startswith('- ')])
     stats['is_changed'] = bool(stats["added"] or stats["removed"])
+    stats['totaltime'] = time.time() - stats["starttime"]
     return rewritten, stats
 
 
@@ -295,14 +297,18 @@ def main(argv=None):
         with open(filename) as file_:
             source_lines = [line.rstrip() for line in file_]
         result, stats = _rewrite_source(filename, source_lines, options.module)
-
+        totaltime = stats["totaltime"]
         if not stats['is_changed']:
-            sys.stderr.write("No changes to %s, skipping\n" % filename)
+            sys.stderr.write(
+                "[Unchanged] %s (in %.4f sec)\n" %
+                (filename, totaltime)
+            )
         else:
             sys.stderr.write(
-                "Writing: %s (lines +%d, -%d removed %d unused import)\n" %
+                "[Writing]   %s (lines +%d/-%d removed %d "
+                "unused import(s) in %.4f sec)\n" %
                 (filename, stats['added'], stats['removed'],
-                 stats['removed_imports'])
+                 stats['removed_imports'], totaltime)
             )
 
         if options.inplace:
