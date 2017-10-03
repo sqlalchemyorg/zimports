@@ -63,10 +63,12 @@ def _rewrite_source(filename, source_lines, local_module,
 
     stats['import_line_delta'] = len(imports) - original_imports
 
-    stdlib, package, locals_ = _get_import_groups(imports, local_module)
+    stdlib, package, noqa, locals_ = _get_import_groups(
+        imports, local_module)
 
     rewritten = _write_source(
-        filename, source_lines, [stdlib, package, locals_], import_gap_lines)
+        filename, source_lines, [stdlib, package, noqa, locals_],
+        import_gap_lines)
 
     differ = list(difflib.Differ().compare(source_lines, rewritten))
     stats['added'] = len([l for l in differ if l.startswith('+ ')])
@@ -135,15 +137,17 @@ def _write_source(filename, source_lines, grouped_imports, import_gap_lines):
 def _write_singlename_import(import_node):
     name = import_node.names[0]
     if isinstance(import_node, ast.Import):
-        return "import %s" % (
+        return "import %s%s" % (
             "%s as %s" % (name.name, name.asname)
-            if name.asname else name.name)
+            if name.asname else name.name,
+            "  # noqa" if import_node.noqa else "")
     else:
-        return "from %s%s import %s" % (
+        return "from %s%s import %s%s" % (
             "." * import_node.level,
             import_node.module or '',
             "%s as %s" % (name.name, name.asname)
-            if name.asname else name.name)
+            if name.asname else name.name,
+            "  # noqa" if import_node.noqa else "")
 
 
 def _parse_toplevel_imports(filename, source_lines):
@@ -166,14 +170,24 @@ def _parse_toplevel_imports(filename, source_lines):
             node.module == '__future__'
         )
     ]
+
+    for import_node in imports:
+        import_node.noqa = source_lines[import_node.lineno - 1].\
+            rstrip().endswith("# noqa")
+
     return imports, warnings, lines_with_code
 
 
 def _remove_unused_names(imports, warnings, stats):
+    noqa_lines = set(
+        import_node.lineno for import_node in imports if import_node.noqa
+    )
+
     remove_imports = {
         (warning.message_args[0], warning.lineno)
         for warning in warnings.messages
-        if isinstance(warning, pyflakes.messages.UnusedImport)
+        if isinstance(warning, pyflakes.messages.UnusedImport) and
+        warning.lineno not in noqa_lines
     }
 
     removed_import_count = 0
@@ -201,6 +215,7 @@ def _as_single_imports(import_nodes):
                     names=[name],
                     col_offset=import_node.col_offset,
                     lineno=import_node.lineno,
+                    noqa=import_node.noqa,
                 )
         elif isinstance(import_node, ast.ImportFrom):
             for name in import_node.names:
@@ -212,6 +227,7 @@ def _as_single_imports(import_nodes):
                     names=[name],
                     col_offset=import_node.col_offset,
                     lineno=import_node.lineno,
+                    noqa=import_node.noqa,
                 )
 
 
@@ -219,6 +235,7 @@ def _get_import_groups(imports, local_module):
     stdlib = set()
     package = set()
     locals_ = set()
+    noqa = []
 
     for import_node in imports:
         assert len(import_node.names) == 1
@@ -226,7 +243,9 @@ def _get_import_groups(imports, local_module):
 
         if isinstance(import_node, ast.ImportFrom):
             module = import_node.module
-            if import_node.level > 0:   # relative import
+            if import_node.noqa:
+                noqa.append(import_node)
+            elif import_node.level > 0:   # relative import
                 locals_.add(import_node)
             elif not module or (
                     local_module and
@@ -239,7 +258,9 @@ def _get_import_groups(imports, local_module):
             import_node._sort_key = (
                 tuple(module.split(".")) if module else ()) + (name, )
         else:
-            if local_module and \
+            if import_node.noqa:
+                noqa.append(import_node)
+            elif local_module and \
                     name.startswith(local_module):
                 locals_.add(import_node)
             elif _is_std_lib(name):
@@ -252,8 +273,7 @@ def _get_import_groups(imports, local_module):
     stdlib = sorted(stdlib, key=lambda n: n._sort_key)
     package = sorted(package, key=lambda n: n._sort_key)
     locals_ = sorted(locals_, key=lambda n: n._sort_key)
-
-    return stdlib, package, locals_
+    return stdlib, package, noqa, locals_
 
 
 def _lines_as_buffer(lines):
