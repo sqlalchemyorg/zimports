@@ -13,7 +13,8 @@ import re
 import time
 
 
-def _rewrite_source(filename, source_lines, local_module):
+def _rewrite_source(filename, source_lines, local_module,
+                    keep_threshhold=None):
 
     stats = {"starttime": time.time()}
 
@@ -43,7 +44,22 @@ def _rewrite_source(filename, source_lines, local_module):
         filename, on_singleline)
 
     # now remove unused names from the imports
-    _remove_unused_names(imports, warnings, stats)
+    # if number of imports is greater than keep_threshold% of the total
+    # lines of code, don't remove names, assume this is like a
+    # package file
+    if not lines_with_code:
+        stats['import_proportion'] = import_proportion = 0
+    else:
+        stats['import_proportion'] = import_proportion = (
+            (len(imports) / float(len(lines_with_code))) * 100)
+
+    if (
+        keep_threshhold is None or
+            import_proportion < keep_threshhold
+    ):
+        _remove_unused_names(imports, warnings, stats)
+    else:
+        stats['removed_imports'] = 0
 
     stats['import_line_delta'] = len(imports) - original_imports
 
@@ -67,7 +83,7 @@ def _get_import_discard_lines(
     import_gap_lines = {node.lineno for node in imports}
 
     prev = None
-    for lineno in [node.lineno for node in imports] + [len(source_lines)]:
+    for lineno in [node.lineno for node in imports] + [len(source_lines) + 1]:
         if prev is not None:
             for gap in range(prev + 1, lineno):
                 if gap in lines_with_code:
@@ -210,7 +226,9 @@ def _get_import_groups(imports, local_module):
 
         if isinstance(import_node, ast.ImportFrom):
             module = import_node.module
-            if not module or (
+            if import_node.level > 0:   # relative import
+                locals_.add(import_node)
+            elif not module or (
                     local_module and
                     module.startswith(local_module)):
                 locals_.add(import_node)
@@ -286,6 +304,19 @@ def main(argv=None):
         "-m", "--module", type=str,
         help="module prefix indicating local import")
     parser.add_argument(
+        "-k", "--keep-unused", action="store_true",
+        help="keep unused imports even though detected as unused"
+    )
+    parser.add_argument(
+        "--heuristic-unused", type=int,
+        help="Remove unused imports only if number of imports is "
+        "less than <HEURISTIC_UNUSED> percent of the total lines of code"
+    )
+    parser.add_argument(
+        "-s", "--statsonly", action="store_true",
+        help="don't write or display anything except the file stats"
+    )
+    parser.add_argument(
         "-i", "--inplace", action="store_true",
         help="modify file in place")
     parser.add_argument('filename', nargs="+")
@@ -296,27 +327,38 @@ def main(argv=None):
     for filename in options.filename:
         with open(filename) as file_:
             source_lines = [line.rstrip() for line in file_]
-        result, stats = _rewrite_source(filename, source_lines, options.module)
+        if options.keep_unused:
+            if options.heuristic_unused:
+                raise Exception(
+                    "keep-unused and heuristic-unused are mutually exclusive")
+            options.heuristic_unused = 0
+        result, stats = _rewrite_source(
+            filename, source_lines, options.module,
+            keep_threshhold=options.heuristic_unused)
         totaltime = stats["totaltime"]
         if not stats['is_changed']:
             sys.stderr.write(
-                "[Unchanged] %s (in %.4f sec)\n" %
+                "[Unchanged]     %s (in %.4f sec)\n" %
                 (filename, totaltime)
             )
         else:
             sys.stderr.write(
-                "[Writing]   %s (lines +%d/-%d removed %d "
-                "unused import(s) in %.4f sec)\n" %
-                (filename, stats['added'], stats['removed'],
+                "%s    %s ([%d%% of lines are imports] "
+                "[source +%dL/-%dL] [%d imports removed in %.4f sec])\n" %
+                ("[Writing]   " if options.inplace and not options.statsonly
+                 else "[Generating]",
+                 filename, stats['import_proportion'], stats['added'],
+                 stats['removed'],
                  stats['removed_imports'], totaltime)
             )
 
-        if options.inplace:
-            if stats['is_changed']:
-                with open(filename, "w") as file_:
-                    file_.write(_lines_as_buffer(result))
-        else:
-            sys.stdout.write(_lines_as_buffer(result))
+        if not options.statsonly:
+            if options.inplace:
+                if stats['is_changed']:
+                    with open(filename, "w") as file_:
+                        file_.write(_lines_as_buffer(result))
+            else:
+                sys.stdout.write(_lines_as_buffer(result))
 
 
 if __name__ == '__main__':
