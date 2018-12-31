@@ -256,7 +256,8 @@ def _get_import_groups(imports, local_module):
             else:
                 package.add(import_node)
             import_node._sort_key = (
-                tuple(module.split(".")) if module else ()) + (name, )
+                tuple(module.split(".")) + ('',)
+                if module else ()) + (name, )
         else:
             if import_node.noqa:
                 noqa.append(import_node)
