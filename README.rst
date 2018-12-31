@@ -2,7 +2,8 @@
 zimports
 ========
 
-Reformats Python imports to be:
+Reformats Python imports so that they can pass flake8-import-order.  This is
+roughly:
 
 * one import per line
 
@@ -11,6 +12,12 @@ Reformats Python imports to be:
 * grouped by builtin / external library / current application
 
 * unused imports removed
+
+Currently we are conforming to the "cryptography" style at:
+
+https://github.com/PyCQA/flake8-import-order/blob/master/tests/test_cases/complete_cryptography.py
+
+because I'm using flake8-import-order with its default settings.
 
 
 zzzeek why are you writing one of these, there are a dozen pep8 import fixers

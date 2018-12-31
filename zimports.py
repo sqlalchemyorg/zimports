@@ -63,11 +63,11 @@ def _rewrite_source(filename, source_lines, local_module,
 
     stats['import_line_delta'] = len(imports) - original_imports
 
-    stdlib, package, noqa, locals_ = _get_import_groups(
+    future, stdlib, package, noqa, locals_ = _get_import_groups(
         imports, local_module)
 
     rewritten = _write_source(
-        filename, source_lines, [stdlib, package, noqa, locals_],
+        filename, source_lines, [future, stdlib, package, noqa, locals_],
         import_gap_lines)
 
     differ = list(difflib.Differ().compare(source_lines, rewritten))
@@ -165,10 +165,7 @@ def _parse_toplevel_imports(filename, source_lines):
     imports = [
         node for node in ast.walk(tree)
         if isinstance(node, (ast.Import, ast.ImportFrom)) and
-        isinstance(node.parent, ast.Module) and not (
-            isinstance(node, ast.ImportFrom) and
-            node.module == '__future__'
-        )
+        isinstance(node.parent, ast.Module)
     ]
 
     for import_node in imports:
@@ -232,10 +229,13 @@ def _as_single_imports(import_nodes):
 
 
 def _get_import_groups(imports, local_module):
+    future = set()
     stdlib = set()
     package = set()
     locals_ = set()
     noqa = []
+
+    LAST = chr(127)
 
     for import_node in imports:
         assert len(import_node.names) == 1
@@ -251,13 +251,20 @@ def _get_import_groups(imports, local_module):
                     local_module and
                     module.startswith(local_module)):
                 locals_.add(import_node)
+            elif module and _is_future(module):
+                future.add(import_node)
             elif module and _is_std_lib(module):
                 stdlib.add(import_node)
             else:
                 package.add(import_node)
-            import_node._sort_key = (
-                tuple(module.split(".")) + ('',)
-                if module else ()) + (name, )
+
+            relative_prefix = LAST * import_node.level
+            mod_tokens = module.split(".") if module else ['']
+            if mod_tokens:
+                mod_tokens[0] = relative_prefix + mod_tokens[0]
+            else:
+                mod_tokens = [relative_prefix]
+            import_node._sort_key = tuple(mod_tokens + ['', name])
         else:
             if import_node.noqa:
                 noqa.append(import_node)
@@ -271,16 +278,21 @@ def _get_import_groups(imports, local_module):
 
             import_node._sort_key = (name, )
 
+    future = sorted(future, key=lambda n: n._sort_key)
     stdlib = sorted(stdlib, key=lambda n: n._sort_key)
     package = sorted(package, key=lambda n: n._sort_key)
     locals_ = sorted(locals_, key=lambda n: n._sort_key)
-    return stdlib, package, noqa, locals_
+    return future, stdlib, package, noqa, locals_
 
 
 def _lines_as_buffer(lines):
     return "\n".join(lines) + "\n"
 
 STDLIB = None
+
+
+def _is_future(module):
+    return module == '__future__'
 
 
 def _is_std_lib(module):
