@@ -8,7 +8,7 @@ setup(
     name='zimports',
     version="0.1.0",
     description="yet another import fixing tool",
-    long_description=file(readme).read(),
+    long_description=open(readme).read(),
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: BSD License',
