@@ -76,11 +76,11 @@ def _rewrite_source(filename, source_lines, local_module,
 
     stats['import_line_delta'] = len(imports) - original_imports
 
-    future, stdlib, package, noqa, locals_ = _get_import_groups(
+    future, stdlib, package, locals_ = _get_import_groups(
         imports, local_module)
 
     rewritten = _write_source(
-        filename, source_lines, [future, stdlib, package, noqa, locals_],
+        filename, source_lines, [future, stdlib, package, locals_],
         import_gap_lines, imports_start_on)
 
     differ = list(difflib.Differ().compare(source_lines, rewritten))
@@ -284,7 +284,6 @@ def _get_import_groups(imports, local_module):
     stdlib = set()
     package = set()
     locals_ = set()
-    noqa = []
 
     LAST = chr(127)
 
@@ -294,9 +293,7 @@ def _get_import_groups(imports, local_module):
 
         if isinstance(import_node, ast.ImportFrom):
             module = import_node.module
-            if import_node.noqa:
-                noqa.append(import_node)
-            elif import_node.level > 0:   # relative import
+            if import_node.level > 0:   # relative import
                 locals_.add(import_node)
             elif not module or (
                     local_module and
@@ -318,9 +315,7 @@ def _get_import_groups(imports, local_module):
             import_node._sort_key = tuple([
                 token.lower() for token in mod_tokens] + ['', name.lower()])
         else:
-            if import_node.noqa:
-                noqa.append(import_node)
-            elif local_module and \
+            if local_module and \
                     name.startswith(local_module):
                 locals_.add(import_node)
             elif _is_std_lib(name):
@@ -334,7 +329,7 @@ def _get_import_groups(imports, local_module):
     stdlib = sorted(stdlib, key=lambda n: n._sort_key)
     package = sorted(package, key=lambda n: n._sort_key)
     locals_ = sorted(locals_, key=lambda n: n._sort_key)
-    return future, stdlib, package, noqa, locals_
+    return future, stdlib, package, locals_
 
 
 def _lines_as_buffer(lines):
