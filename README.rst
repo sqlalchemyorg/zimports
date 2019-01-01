@@ -13,11 +13,13 @@ roughly:
 
 * unused imports removed
 
-Currently we are conforming to the "cryptography" style at:
+Currently we are conforming to the "google" style at:
 
-https://github.com/PyCQA/flake8-import-order/blob/master/tests/test_cases/complete_cryptography.py
+https://github.com/PyCQA/flake8-import-order/blob/master/tests/test_cases/complete_google.py
 
-because I'm using flake8-import-order with its default settings.
+because I'm using flake8-import-order using that style, which most closely
+matched what I had this program doing at first (which is really mostly like the Openstack
+style).
 
 
 zzzeek why are you writing one of these, there are a dozen pep8 import fixers
