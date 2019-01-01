@@ -189,12 +189,25 @@ def _remove_unused_names(imports, warnings, stats):
 
     removed_import_count = 0
     for import_node in imports:
-        new = [
-            name for name in import_node.names
-            if (name.name, import_node.lineno) not in remove_imports
-        ]
-        removed_import_count += (len(import_node.names) - len(new))
-        import_node.names[:] = new
+        if isinstance(import_node, ast.ImportFrom):
+            warning_key = (
+                '.' * import_node.level
+                if isinstance(import_node, ast.ImportFrom)
+                else ''
+            ) + (import_node.module + "." if import_node.module else '') + \
+                ".".join(name.name for name in import_node.names)
+
+            if (warning_key, import_node.lineno) in remove_imports:
+                import_node.names = []
+                removed_import_count += 1
+        else:
+            new = [
+                name for name in import_node.names
+                if (name.name, import_node.lineno) not in remove_imports
+            ]
+
+            removed_import_count += (len(import_node.names) - len(new))
+            import_node.names[:] = new
     new_imports = [node for node in imports if node.names]
 
     stats['removed_imports'] = removed_import_count
@@ -264,7 +277,8 @@ def _get_import_groups(imports, local_module):
                 mod_tokens[0] = relative_prefix + mod_tokens[0]
             else:
                 mod_tokens = [relative_prefix]
-            import_node._sort_key = tuple(mod_tokens + ['', name])
+            import_node._sort_key = tuple([
+                token.lower() for token in mod_tokens] + ['', name.lower()])
         else:
             if import_node.noqa:
                 noqa.append(import_node)
