@@ -27,6 +27,10 @@ def _rewrite_source(filename, source_lines, local_module,
         filename, source_lines)
 
     original_imports = len(imports)
+    if imports:
+        imports_start_on = imports[0].lineno
+    else:
+        imports_start_on = 0
 
     # assemble a set of line numbers that will not be copied to the
     # output.  E.g. lines where import statements occurred, or the
@@ -40,7 +44,7 @@ def _rewrite_source(filename, source_lines, local_module,
     imports = list(
         _as_single_imports(imports, stats, expand_stars=expand_stars))
     on_singleline = _write_source(
-        filename, source_lines, [imports], import_gap_lines)
+        filename, source_lines, [imports], import_gap_lines, imports_start_on)
 
     # now parse again.  Because pyflakes won't tell us about unused
     # imports that are not the first import, we had to flatten first.
@@ -77,7 +81,7 @@ def _rewrite_source(filename, source_lines, local_module,
 
     rewritten = _write_source(
         filename, source_lines, [future, stdlib, package, noqa, locals_],
-        import_gap_lines)
+        import_gap_lines, imports_start_on)
 
     differ = list(difflib.Differ().compare(source_lines, rewritten))
 
@@ -113,10 +117,9 @@ def _is_whitespace_or_comment(line):
     return bool(re.match(r"^\s*$", line) or re.match(r"^\s*#", line))
 
 
-def _write_source(filename, source_lines, grouped_imports, import_gap_lines):
-    lineno = [import_node.lineno
-              for group in grouped_imports for import_node in group]
-    imports_start_on = min(lineno) if lineno else -1
+def _write_source(
+        filename, source_lines, grouped_imports,
+        import_gap_lines, imports_start_on):
 
     buf = []
     added_imports = False
@@ -349,6 +352,10 @@ def _is_std_lib(module):
 
 
 def _get_stdlib_names():
+    # zzzeek uses 'import test' in some test suites and it's some kind of
+    # fake stdlib thing
+    not_stdlib = {'test'}
+
     # https://stackoverflow.com/a/37243423/34549
     # Get list of the loaded source modules on sys.path.
     modules = {module
@@ -371,7 +378,7 @@ def _get_stdlib_names():
     python_root = distutils.sysconfig.get_python_lib(standard_lib=True)
     _, top_level_libs, _ = list(os.walk(python_root))[0]
 
-    return set(top_level_libs + list(modules | system_modules))
+    return set(top_level_libs + list(modules | system_modules)) - not_stdlib
 
 
 def main(argv=None):
