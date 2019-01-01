@@ -8,15 +8,18 @@ import os
 import distutils
 import difflib
 import glob
+import importlib
 import pkgutil
 import re
 import time
 
 
 def _rewrite_source(filename, source_lines, local_module,
-                    keep_threshhold=None):
+                    keep_threshhold=None, expand_stars=False):
 
-    stats = {"starttime": time.time()}
+    stats = {
+        "starttime": time.time(),
+        "names_from_star": 0, "star_imports_removed": 0}
 
     # parse the code.  get the imports and a collection of line numbers
     # we definitely don't want to discard
@@ -34,7 +37,8 @@ def _rewrite_source(filename, source_lines, local_module,
 
     # flatten imports into single import per line and rewrite
     # full source
-    imports = list(_as_single_imports(imports))
+    imports = list(
+        _as_single_imports(imports, stats, expand_stars=expand_stars))
     on_singleline = _write_source(
         filename, source_lines, [imports], import_gap_lines)
 
@@ -51,7 +55,12 @@ def _rewrite_source(filename, source_lines, local_module,
         stats['import_proportion'] = import_proportion = 0
     else:
         stats['import_proportion'] = import_proportion = (
-            (len(imports) / float(len(lines_with_code))) * 100)
+            (
+                (
+                    len(imports) + stats['star_imports_removed'] -
+                    stats['names_from_star']
+                ) / float(len(lines_with_code))
+            ) * 100)
 
     if (
         keep_threshhold is None or
@@ -71,6 +80,7 @@ def _rewrite_source(filename, source_lines, local_module,
         import_gap_lines)
 
     differ = list(difflib.Differ().compare(source_lines, rewritten))
+
     stats['added'] = len([l for l in differ if l.startswith('+ ')])
     stats['removed'] = len([l for l in differ if l.startswith('- ')])
     stats['is_changed'] = bool(stats["added"] or stats["removed"])
@@ -210,12 +220,15 @@ def _remove_unused_names(imports, warnings, stats):
             import_node.names[:] = new
     new_imports = [node for node in imports if node.names]
 
-    stats['removed_imports'] = removed_import_count
+    stats['removed_imports'] = (
+        removed_import_count - stats['names_from_star'] +
+        stats['star_imports_removed']
+    )
 
     imports[:] = new_imports
 
 
-def _as_single_imports(import_nodes):
+def _as_single_imports(import_nodes, stats, expand_stars=False):
     for import_node in import_nodes:
         if isinstance(import_node, ast.Import):
             for name in import_node.names:
@@ -229,16 +242,33 @@ def _as_single_imports(import_nodes):
                 )
         elif isinstance(import_node, ast.ImportFrom):
             for name in import_node.names:
-                yield ast.ImportFrom(
-                    parent=import_node.parent,
-                    depth=import_node.depth,
-                    module=import_node.module,
-                    level=import_node.level,
-                    names=[name],
-                    col_offset=import_node.col_offset,
-                    lineno=import_node.lineno,
-                    noqa=import_node.noqa,
-                )
+                if name.name == '*' and expand_stars:
+                    stats["star_imports_removed"] += 1
+                    ast_cls = type(name)
+                    module = importlib.import_module(import_node.module)
+                    for star_name in getattr(module, '__all__', dir(module)):
+                        stats['names_from_star'] += 1
+                        yield ast.ImportFrom(
+                            parent=import_node.parent,
+                            depth=import_node.depth,
+                            module=import_node.module,
+                            level=import_node.level,
+                            names=[ast_cls(star_name, asname=None)],
+                            col_offset=import_node.col_offset,
+                            lineno=import_node.lineno,
+                            noqa=import_node.noqa,
+                        )
+                else:
+                    yield ast.ImportFrom(
+                        parent=import_node.parent,
+                        depth=import_node.depth,
+                        module=import_node.module,
+                        level=import_node.level,
+                        names=[name],
+                        col_offset=import_node.col_offset,
+                        lineno=import_node.lineno,
+                        noqa=import_node.noqa,
+                    )
 
 
 def _get_import_groups(imports, local_module):
@@ -364,6 +394,11 @@ def main(argv=None):
         help="don't write or display anything except the file stats"
     )
     parser.add_argument(
+        "-e", "--expand-stars", action="store_true",
+        help="Expand star imports into the names in the actual module, which "
+        "can then have unused names removed.  Requires modules can be imported"
+    )
+    parser.add_argument(
         "-i", "--inplace", action="store_true",
         help="modify file in place")
     parser.add_argument('filename', nargs="+")
@@ -381,7 +416,8 @@ def main(argv=None):
             options.heuristic_unused = 0
         result, stats = _rewrite_source(
             filename, source_lines, options.module,
-            keep_threshhold=options.heuristic_unused)
+            keep_threshhold=options.heuristic_unused,
+            expand_stars=options.expand_stars)
         totaltime = stats["totaltime"]
         if not stats['is_changed']:
             sys.stderr.write(
