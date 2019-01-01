@@ -114,7 +114,12 @@ def _get_import_discard_lines(
 
 
 def _is_whitespace_or_comment(line):
-    return bool(re.match(r"^\s*$", line) or re.match(r"^\s*#", line))
+    return bool(
+        re.match(r"^\s*$", line) or
+        re.match(r"^\s*#", line) or
+        re.match(r"^\s*'''", line) or
+        re.match(r'^\s*"""', line)
+    )
 
 
 def _write_source(
