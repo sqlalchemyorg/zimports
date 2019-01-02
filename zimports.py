@@ -1,6 +1,7 @@
 from __future__ import print_function
 import argparse
 import ast
+import flake8_import_order
 import pyflakes.checker
 import pyflakes.messages
 import sys
@@ -359,7 +360,14 @@ def _is_std_lib(module):
     return token in STDLIB
 
 
-def _get_stdlib_names():
+def _get_stdlib_names_f8_import_order():
+    # hardcoded list
+    return flake8_import_order.STDLIB_NAMES
+
+
+def _get_stdlib_names_zimports():
+    # guesswork, doesn't work completely
+
     # zzzeek uses 'import test' in some test suites and it's some kind of
     # fake stdlib thing
     not_stdlib = {'test'}
@@ -387,6 +395,8 @@ def _get_stdlib_names():
     _, top_level_libs, _ = list(os.walk(python_root))[0]
 
     return set(top_level_libs + list(modules | system_modules)) - not_stdlib
+
+_get_stdlib_names = _get_stdlib_names_f8_import_order
 
 
 def main(argv=None):

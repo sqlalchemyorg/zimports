@@ -21,7 +21,7 @@ setup(
     license='BSD',
     py_modules=('zimports', ),
     zip_safe=False,
-    install_requires=['pyflakes'],
+    install_requires=['pyflakes', 'flake8-import-order'],
     entry_points={
         'console_scripts': ['zimports = zimports:main'],
     }
