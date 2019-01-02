@@ -137,7 +137,9 @@ def _write_source(
                 )
                 if imports:
                     added_imports = True
-                    buf.append("")
+                    # whitespace following imports,
+                    # fixed at two lines
+                    buf.extend(["", ""])
 
         if lineno not in import_gap_lines:
             # if we just added imports, suppress whitespace
@@ -391,7 +393,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "-m", "--module", type=str,
+        "-m", "--module", type=str, default="",
         help="module prefix indicating local import "
              "(can be multiple comma separated)")
     parser.add_argument(
