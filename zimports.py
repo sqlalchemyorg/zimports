@@ -137,9 +137,9 @@ def _write_source(
                 )
                 if imports:
                     added_imports = True
-                    # whitespace following imports,
-                    # fixed at two lines
-                    buf.extend(["", ""])
+                    buf.append("")  # at end of import group
+            # at end of imports overall
+            buf.append("")
 
         if lineno not in import_gap_lines:
             # if we just added imports, suppress whitespace
