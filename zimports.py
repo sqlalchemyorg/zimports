@@ -14,7 +14,7 @@ import re
 import time
 
 
-def _rewrite_source(filename, source_lines, local_module,
+def _rewrite_source(filename, source_lines, local_modules,
                     keep_threshhold=None, expand_stars=False):
 
     stats = {
@@ -77,7 +77,7 @@ def _rewrite_source(filename, source_lines, local_module,
     stats['import_line_delta'] = len(imports) - original_imports
 
     future, stdlib, package, locals_ = _get_import_groups(
-        imports, local_module)
+        imports, local_modules)
 
     rewritten = _write_source(
         filename, source_lines, [future, stdlib, package, locals_],
@@ -279,13 +279,15 @@ def _as_single_imports(import_nodes, stats, expand_stars=False):
                     )
 
 
-def _get_import_groups(imports, local_module):
+def _get_import_groups(imports, local_modules):
     future = set()
     stdlib = set()
     package = set()
     locals_ = set()
 
     LAST = chr(127)
+
+    local_modules = set(local_modules.split(","))
 
     for import_node in imports:
         assert len(import_node.names) == 1
@@ -296,8 +298,8 @@ def _get_import_groups(imports, local_module):
             if import_node.level > 0:   # relative import
                 locals_.add(import_node)
             elif not module or (
-                    local_module and
-                    module.startswith(local_module)):
+                    local_modules and
+                    True in {module.startswith(mod) for mod in local_modules}):
                 locals_.add(import_node)
             elif module and _is_future(module):
                 future.add(import_node)
@@ -313,17 +315,19 @@ def _get_import_groups(imports, local_module):
             else:
                 mod_tokens = [relative_prefix]
             import_node._sort_key = tuple([
-                token.lower() for token in mod_tokens] + ['', name.lower()])
+                token.lower() for token in mod_tokens] +
+                ['', name.lower(), name]
+            )
         else:
-            if local_module and \
-                    name.startswith(local_module):
+            if local_modules and \
+                    True in {name.startswith(mod) for mod in local_modules}:
                 locals_.add(import_node)
             elif _is_std_lib(name):
                 stdlib.add(import_node)
             else:
                 package.add(import_node)
 
-            import_node._sort_key = (name, )
+            import_node._sort_key = (name.lower(), name)
 
     future = sorted(future, key=lambda n: n._sort_key)
     stdlib = sorted(stdlib, key=lambda n: n._sort_key)
@@ -386,7 +390,8 @@ def main(argv=None):
 
     parser.add_argument(
         "-m", "--module", type=str,
-        help="module prefix indicating local import")
+        help="module prefix indicating local import "
+             "(can be multiple comma separated)")
     parser.add_argument(
         "-k", "--keep-unused", action="store_true",
         help="keep unused imports even though detected as unused"
