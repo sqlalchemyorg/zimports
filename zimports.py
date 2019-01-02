@@ -302,7 +302,8 @@ def _get_import_groups(imports, local_modules):
                 locals_.add(import_node)
             elif not module or (
                     local_modules and
-                    True in {module.startswith(mod) for mod in local_modules}):
+                    True in {module.startswith(mod)
+                             for mod in local_modules if mod}):
                 locals_.add(import_node)
             elif module and _is_future(module):
                 future.add(import_node)
@@ -323,7 +324,9 @@ def _get_import_groups(imports, local_modules):
             )
         else:
             if local_modules and \
-                    True in {name.startswith(mod) for mod in local_modules}:
+                    True in {
+                        name.startswith(mod) for mod in local_modules if mod
+                    }:
                 locals_.add(import_node)
             elif _is_std_lib(name):
                 stdlib.add(import_node)
