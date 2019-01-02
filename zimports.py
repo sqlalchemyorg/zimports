@@ -315,8 +315,8 @@ def _get_import_groups(imports, local_modules):
             else:
                 mod_tokens = [relative_prefix]
             import_node._sort_key = tuple([
-                "%s|%s" % (token.lower(), token) for token in mod_tokens] +
-                ['', "%s|%s" % (name.lower(), name)]
+                (token.lower(), token) for token in mod_tokens] +
+                [('', ''), (name.lower(), name)]
             )
         else:
             if local_modules and \
@@ -327,7 +327,9 @@ def _get_import_groups(imports, local_modules):
             else:
                 package.add(import_node)
 
-            import_node._sort_key = ("%s|%s" % (name.lower(), name), )
+            import_node._sort_key = tuple(
+                (token.lower(), token) for token in name.split(".")
+            )
 
     future = sorted(future, key=lambda n: n._sort_key)
     stdlib = sorted(stdlib, key=lambda n: n._sort_key)
