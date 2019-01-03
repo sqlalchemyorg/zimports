@@ -216,7 +216,10 @@ def _remove_unused_names(imports, warnings, stats):
                 if isinstance(import_node, ast.ImportFrom)
                 else ''
             ) + (import_node.module + "." if import_node.module else '') + \
-                ".".join(name.name for name in import_node.names)
+                ".".join(
+                    "%s as %s" % (name.name, name.asname)
+                    if name.asname else name.name
+                    for name in import_node.names)
 
             if (warning_key, import_node.lineno) in remove_imports:
                 import_node.names = []
