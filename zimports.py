@@ -104,6 +104,8 @@ def _get_import_discard_lines(
 
     import_gap_lines = {node.lineno for node in imports}
 
+    intermediary_whitespace_lines = []
+
     prev = None
     for lineno in [node.lineno for node in imports] + [len(source_lines) + 1]:
         if prev is not None:
@@ -115,6 +117,20 @@ def _get_import_discard_lines(
                 elif not _is_whitespace_or_comment(source_lines[gap - 1]):
                     import_gap_lines.add(gap)
         prev = lineno
+
+    # now search for whitespace intermingled in the imports that does
+    # not include any non-import code
+    sorted_gap_lines = list(sorted(import_gap_lines))
+    for index, gap_line in enumerate(sorted_gap_lines[0:-1]):
+        for lineno in range(gap_line + 1, sorted_gap_lines[index + 1]):
+            if not source_lines[lineno - 1].rstrip():
+                intermediary_whitespace_lines.append(lineno)
+            else:
+                intermediary_whitespace_lines[:] = []
+        if intermediary_whitespace_lines:
+            import_gap_lines = import_gap_lines.union(
+                intermediary_whitespace_lines)
+            intermediary_whitespace_lines[:] = []
 
     return import_gap_lines
 
@@ -131,9 +147,8 @@ def _is_whitespace_or_comment(line):
 def _write_source(
         filename, source_lines, grouped_imports,
         import_gap_lines, imports_start_on):
-
     buf = []
-    added_imports = False
+    has_imports = False
     for lineno, line in enumerate(source_lines, 1):
         if lineno == imports_start_on:
             for j, imports in enumerate(grouped_imports):
@@ -142,20 +157,13 @@ def _write_source(
                     for import_node in imports
                 )
                 if imports:
-                    added_imports = True
+                    has_imports = True
                     buf.append("")  # at end of import group
-            # at end of imports overall
-            buf.append("")
+
+            if has_imports:
+                del buf[-1]  # delete last whitespace following imports
 
         if lineno not in import_gap_lines:
-            # if we just added imports, suppress whitespace
-            # until we get to a line
-            if added_imports:
-                if not line.rstrip():
-                    continue
-                else:
-                    added_imports = False
-
             buf.append(line.rstrip())
     return buf
 

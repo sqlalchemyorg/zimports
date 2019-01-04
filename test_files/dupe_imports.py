@@ -21,7 +21,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Table
 
 
-
 t = Table(Column(cx_oracle.FOO, ForeignKey()))
 
 b = declarative_base(declarative.bar())

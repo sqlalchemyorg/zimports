@@ -140,6 +140,13 @@ class CompileTest(fixtures.TestBase, AssertsCompiledSQL):
             "GROUP BY included_parts.sub_part"
         )
 
+
+from ..sql.selectable import ForUpdateArg
+
+
+class CompileTest2(fixtures.TestBase, AssertsCompiledSQL):
+    __dialect__ = "oracle"
+
     def test_limit(self):
         t = table('sometable', column('col1'), column('col2'))
         s = select([t])
