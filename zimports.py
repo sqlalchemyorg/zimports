@@ -20,7 +20,10 @@ def _rewrite_source(filename, source_lines, local_modules,
 
     stats = {
         "starttime": time.time(),
-        "names_from_star": 0, "star_imports_removed": 0}
+        "names_from_star": 0,
+        "star_imports_removed": 0,
+        "removed_imports": 0
+    }
 
     # parse the code.  get the imports and a collection of line numbers
     # we definitely don't want to discard
@@ -43,7 +46,11 @@ def _rewrite_source(filename, source_lines, local_modules,
     # flatten imports into single import per line and rewrite
     # full source
     imports = list(
-        _as_single_imports(imports, stats, expand_stars=expand_stars))
+        _dedupe_single_imports(
+            _as_single_imports(imports, stats, expand_stars=expand_stars),
+            stats
+        )
+    )
     on_singleline = _write_source(
         filename, source_lines, [imports], import_gap_lines, imports_start_on)
 
@@ -72,8 +79,6 @@ def _rewrite_source(filename, source_lines, local_modules,
             import_proportion < keep_threshhold
     ):
         _remove_unused_names(imports, warnings, stats)
-    else:
-        stats['removed_imports'] = 0
 
     stats['import_line_delta'] = len(imports) - original_imports
 
@@ -243,7 +248,7 @@ def _remove_unused_names(imports, warnings, stats):
             import_node.names[:] = new
     new_imports = [node for node in imports if node.names]
 
-    stats['removed_imports'] = (
+    stats['removed_imports'] += (
         removed_import_count - stats['names_from_star'] +
         stats['star_imports_removed']
     )
@@ -251,7 +256,29 @@ def _remove_unused_names(imports, warnings, stats):
     imports[:] = new_imports
 
 
+def _dedupe_single_imports(import_nodes, stats):
+    dupes = set()
+    for import_node in import_nodes:
+        if isinstance(import_node, ast.Import):
+            assert len(import_node.names) == 1
+            hash_key = (import_node.names[0].name, import_node.names[0].asname)
+        elif isinstance(import_node, ast.ImportFrom):
+            assert len(import_node.names) == 1
+            hash_key = (
+                import_node.module, import_node.level,
+                import_node.names[0].name, import_node.names[0].asname)
+        else:
+            raise ValueError("not a node we expected: %s" % import_node)
+
+        if hash_key in dupes:
+            stats['removed_imports'] += 1
+            continue
+        else:
+            dupes.add(hash_key)
+            yield import_node
+
 def _as_single_imports(import_nodes, stats, expand_stars=False):
+
     for import_node in import_nodes:
         if isinstance(import_node, ast.Import):
             for name in import_node.names:
