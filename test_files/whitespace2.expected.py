@@ -1,8 +1,6 @@
-import foo
 import bar
-from hoho import bat, \
-    bat2,\
-    bat3
+import foo
+from hoho import bat3
 
 
 class Line8MovesToLine6:

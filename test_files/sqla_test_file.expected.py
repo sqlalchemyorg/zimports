@@ -1,39 +1,23 @@
 # coding: utf-8
 
-import sqlalchemy.testing.foo, foobar.testing.bar
-from sqlalchemy.testing import eq_
-from sqlalchemy import types as sqltypes, exc, schema
-from sqlalchemy.sql import table, column
-from bat.hoho import blah as beep
-# im a comment
-from sqlalchemy.testing import (fixtures,
-                                AssertsExecutionResults,
-                                AssertsCompiledSQL)
-from sqlalchemy import testing
-from sqlalchemy import Integer, Text, LargeBinary, Unicode, UniqueConstraint,\
-    Index, MetaData, select, inspect, ForeignKey, String, func, \
-    TypeDecorator, bindparam, Numeric, TIMESTAMP, CHAR, text, \
-    literal_column, VARCHAR, create_engine, Date, NVARCHAR, \
-    ForeignKeyConstraint, Sequence, Float, DateTime, cast, UnicodeText, \
-    union, except_, type_coerce, or_, outerjoin, DATE, NCHAR, outparam, \
-    PrimaryKeyConstraint, FLOAT
-from .. import foobar
-from sqlalchemy.util import u, b
-# here, we have a comment
-
-
-from sqlalchemy import util
-from sqlalchemy.testing import assert_raises, assert_raises_message
-from sqlalchemy.testing.engines import testing_engine
-from sqlalchemy.dialects.oracle import cx_oracle, base as oracle
-from sqlalchemy.engine import default
-import decimal
-from sqlalchemy.engine import url
-from sqlalchemy.testing.schema import Table, Column
-import datetime
-import os
+from sqlalchemy import bindparam
+from sqlalchemy import ForeignKey
+from sqlalchemy import func
+from sqlalchemy import Integer
+from sqlalchemy import MetaData
+from sqlalchemy import select
 from sqlalchemy import sql
-from sqlalchemy.testing.mock import Mock
+from sqlalchemy import String
+from sqlalchemy.dialects.oracle import base as oracle
+from sqlalchemy.sql import column
+from sqlalchemy.sql import table
+from sqlalchemy.testing import AssertsCompiledSQL
+from sqlalchemy.testing import eq_
+from sqlalchemy.testing import fixtures
+from sqlalchemy.testing.schema import Column
+from sqlalchemy.testing.schema import Table
+# im a comment
+# here, we have a comment
 
 
 class CompileTest(fixtures.TestBase, AssertsCompiledSQL):
@@ -139,9 +123,6 @@ class CompileTest(fixtures.TestBase, AssertsCompiledSQL):
             "AS total_quantity FROM included_parts "
             "GROUP BY included_parts.sub_part"
         )
-
-
-from ..sql.selectable import ForUpdateArg
 
 
 class CompileTest2(fixtures.TestBase, AssertsCompiledSQL):

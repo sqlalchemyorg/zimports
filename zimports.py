@@ -1,34 +1,42 @@
 from __future__ import print_function
+
 import argparse
 import ast
+import difflib
+import distutils
+import glob
+import importlib
+import os
+import pkgutil
+import re
+import sys
+import time
+
 import flake8_import_order
 import pyflakes.checker
 import pyflakes.messages
-import sys
-import os
-import distutils
-import difflib
-import glob
-import importlib
-import pkgutil
-import re
-import time
 
 
-def _rewrite_source(filename, source_lines, local_modules,
-                    keep_threshhold=None, expand_stars=False):
+def _rewrite_source(
+    filename,
+    source_lines,
+    local_modules,
+    keep_threshhold=None,
+    expand_stars=False,
+):
 
     stats = {
         "starttime": time.time(),
         "names_from_star": 0,
         "star_imports_removed": 0,
-        "removed_imports": 0
+        "removed_imports": 0,
     }
 
     # parse the code.  get the imports and a collection of line numbers
     # we definitely don't want to discard
     imports, _, lines_with_code = _parse_toplevel_imports(
-        filename, source_lines)
+        filename, source_lines
+    )
 
     original_imports = len(imports)
     if imports:
@@ -41,66 +49,73 @@ def _rewrite_source(filename, source_lines, local_modules,
     # extra lines they take up which we figure out by looking at the
     # "gap" between statements
     import_gap_lines = _get_import_discard_lines(
-        filename, source_lines, imports, lines_with_code)
+        filename, source_lines, imports, lines_with_code
+    )
 
     # flatten imports into single import per line and rewrite
     # full source
     imports = list(
         _dedupe_single_imports(
             _as_single_imports(imports, stats, expand_stars=expand_stars),
-            stats
+            stats,
         )
     )
-    on_singleline = _write_source(
-        filename, source_lines, [imports], import_gap_lines, imports_start_on)
 
+    on_singleline = _write_source(
+        filename, source_lines, [imports], import_gap_lines, imports_start_on
+    )
     # now parse again.  Because pyflakes won't tell us about unused
     # imports that are not the first import, we had to flatten first.
     imports, warnings, lines_with_code = _parse_toplevel_imports(
-        filename, on_singleline)
+        filename, on_singleline, drill_for_warnings=True
+    )
 
     # now remove unused names from the imports
     # if number of imports is greater than keep_threshold% of the total
     # lines of code, don't remove names, assume this is like a
     # package file
     if not lines_with_code:
-        stats['import_proportion'] = import_proportion = 0
+        stats["import_proportion"] = import_proportion = 0
     else:
-        stats['import_proportion'] = import_proportion = (
+        stats["import_proportion"] = import_proportion = (
             (
-                (
-                    len(imports) + stats['star_imports_removed'] -
-                    stats['names_from_star']
-                ) / float(len(lines_with_code))
-            ) * 100)
+                len(imports)
+                + stats["star_imports_removed"]
+                - stats["names_from_star"]
+            )
+            / float(len(lines_with_code))
+        ) * 100
 
-    if (
-        keep_threshhold is None or
-            import_proportion < keep_threshhold
-    ):
+    if keep_threshhold is None or import_proportion < keep_threshhold:
         _remove_unused_names(imports, warnings, stats)
 
-    stats['import_line_delta'] = len(imports) - original_imports
+    stats["import_line_delta"] = len(imports) - original_imports
 
     future, stdlib, package, nosort, locals_ = _get_import_groups(
-        imports, local_modules)
+        imports, local_modules
+    )
 
     rewritten = _write_source(
-        filename, source_lines, [future, stdlib, package, locals_, nosort],
-        import_gap_lines, imports_start_on)
+        filename,
+        source_lines,
+        [future, stdlib, package, locals_, nosort],
+        import_gap_lines,
+        imports_start_on,
+    )
 
     differ = list(difflib.Differ().compare(source_lines, rewritten))
 
-    stats['added'] = len([l for l in differ if l.startswith('+ ')])
-    stats['removed'] = len([l for l in differ if l.startswith('- ')])
-    stats['is_changed'] = bool(stats["added"] or stats["removed"])
-    stats['totaltime'] = time.time() - stats["starttime"]
+    stats["added"] = len([l for l in differ if l.startswith("+ ")])
+    stats["removed"] = len([l for l in differ if l.startswith("- ")])
+    stats["is_changed"] = bool(stats["added"] or stats["removed"])
+    stats["totaltime"] = time.time() - stats["starttime"]
     return rewritten, stats
 
 
 def _get_import_discard_lines(
-        filename, source_lines, imports, lines_with_code):
-    """get line numbers that are part of imports but not in the AST."""
+    filename, source_lines, imports, lines_with_code
+):
+    """Get line numbers that are part of imports but not in the AST."""
 
     import_gap_lines = {node.lineno for node in imports}
 
@@ -129,7 +144,8 @@ def _get_import_discard_lines(
                 intermediary_whitespace_lines[:] = []
         if intermediary_whitespace_lines:
             import_gap_lines = import_gap_lines.union(
-                intermediary_whitespace_lines)
+                intermediary_whitespace_lines
+            )
             intermediary_whitespace_lines[:] = []
 
     return import_gap_lines
@@ -137,16 +153,16 @@ def _get_import_discard_lines(
 
 def _is_whitespace_or_comment(line):
     return bool(
-        re.match(r"^\s*$", line) or
-        re.match(r"^\s*#", line) or
-        re.match(r"^\s*'''", line) or
-        re.match(r'^\s*"""', line)
+        re.match(r"^\s*$", line)
+        or re.match(r"^\s*#", line)
+        or re.match(r"^\s*'''", line)
+        or re.match(r'^\s*"""', line)
     )
 
 
 def _write_source(
-        filename, source_lines, grouped_imports,
-        import_gap_lines, imports_start_on):
+    filename, source_lines, grouped_imports, import_gap_lines, imports_start_on
+):
     buf = []
     has_imports = False
     for lineno, line in enumerate(source_lines, 1):
@@ -173,49 +189,100 @@ def _write_singlename_import(import_node):
     if isinstance(import_node, ast.Import):
         return "import %s%s%s" % (
             "%s as %s" % (name.name, name.asname)
-            if name.asname else name.name,
+            if name.asname
+            else name.name,
             "  # noqa" if import_node.noqa else "",
-            " nosort" if import_node.nosort else ""
+            " nosort" if import_node.nosort else "",
         )
     else:
         return "from %s%s import %s%s%s" % (
             "." * import_node.level,
-            import_node.module or '',
+            import_node.module or "",
             "%s as %s" % (name.name, name.asname)
-            if name.asname else name.name,
+            if name.asname
+            else name.name,
             "  # noqa" if import_node.noqa else "",
-            " nosort" if import_node.nosort else ""
+            " nosort" if import_node.nosort else "",
         )
 
 
-def _parse_toplevel_imports(filename, source_lines):
+def _parse_toplevel_imports(filename, source_lines, drill_for_warnings=False):
     source = "\n".join(source_lines)
 
     tree = ast.parse(source, filename)
 
     lines_with_code = set(
-        node.lineno for node in ast.walk(tree)
-        if hasattr(node, 'lineno')
+        node.lineno for node in ast.walk(tree) if hasattr(node, "lineno")
     )
     # running the Checker also creates the "node.parent"
     # attribute which is helpful
     warnings = pyflakes.checker.Checker(tree, filename)
+
+    if drill_for_warnings:
+        warnings_set = _drill_for_warnings(filename, source_lines, warnings)
+    else:
+        warnings_set = None
+
     imports = [
-        node for node in ast.walk(tree)
-        if isinstance(node, (ast.Import, ast.ImportFrom)) and
-        isinstance(node.parent, ast.Module)
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        and isinstance(node.parent, ast.Module)
     ]
 
     for import_node in imports:
-        line = source_lines[import_node.lineno - 1].\
-            rstrip()
+        line = source_lines[import_node.lineno - 1].rstrip()
         symbols = re.match(r".* # noqa( nosort)?", line)
         import_node.noqa = import_node.nosort = False
         if symbols:
             import_node.noqa = True
             if symbols.group(1):
                 import_node.nosort = True
-    return imports, warnings, lines_with_code
+    return imports, warnings_set, lines_with_code
+
+
+def _drill_for_warnings(filename, source_lines, warnings):
+    # pyflakes doesn't warn for all occurrences of an unused import
+    # if that same symbol is repeated, so run over and over again
+    # until we find every possible warning.  assumes single-line
+    # imports
+
+    source_lines = list(source_lines)
+    warnings_set = set()
+    seen_lineno = set()
+    while True:
+        has_warnings = False
+        for warning in warnings.messages:
+            if (
+                not isinstance(warning, pyflakes.messages.UnusedImport)
+                or warning.lineno in seen_lineno
+            ):
+                continue
+
+            # we only deal with "top level" imports for now. imports
+            # inside of conditionals or in defs aren't counted.
+            whitespace = re.match(
+                r"^\s*", source_lines[warning.lineno - 1]
+            ).group(0)
+            if whitespace:
+                continue
+            has_warnings = True
+            warnings_set.add((warning.message_args[0], warning.lineno))
+
+            # replace the line with nothing so that we approach no more
+            # warnings generated. note this would be much trickier if we are
+            # trying to deal with imports inside conditionals/defs
+            source_lines[warning.lineno - 1] = ""
+            seen_lineno.add(warning.lineno)
+
+        if not has_warnings:
+            break
+
+        source = "\n".join(source_lines)
+        tree = ast.parse(source, filename)
+        warnings = pyflakes.checker.Checker(tree, filename)
+
+    return warnings_set
 
 
 def _remove_unused_names(imports, warnings, stats):
@@ -224,41 +291,45 @@ def _remove_unused_names(imports, warnings, stats):
     )
 
     remove_imports = {
-        (warning.message_args[0], warning.lineno)
-        for warning in warnings.messages
-        if isinstance(warning, pyflakes.messages.UnusedImport) and
-        warning.lineno not in noqa_lines
+        (name, lineno) for name, lineno in warnings if lineno not in noqa_lines
     }
 
     removed_import_count = 0
     for import_node in imports:
         if isinstance(import_node, ast.ImportFrom):
             warning_key = (
-                '.' * import_node.level
-                if isinstance(import_node, ast.ImportFrom)
-                else ''
-            ) + (import_node.module + "." if import_node.module else '') + \
-                ".".join(
+                (
+                    "." * import_node.level
+                    if isinstance(import_node, ast.ImportFrom)
+                    else ""
+                )
+                + (import_node.module + "." if import_node.module else "")
+                + ".".join(
                     "%s as %s" % (name.name, name.asname)
-                    if name.asname else name.name
-                    for name in import_node.names)
+                    if name.asname
+                    else name.name
+                    for name in import_node.names
+                )
+            )
 
             if (warning_key, import_node.lineno) in remove_imports:
                 import_node.names = []
                 removed_import_count += 1
         else:
             new = [
-                name for name in import_node.names
+                name
+                for name in import_node.names
                 if (name.name, import_node.lineno) not in remove_imports
             ]
 
-            removed_import_count += (len(import_node.names) - len(new))
+            removed_import_count += len(import_node.names) - len(new)
             import_node.names[:] = new
     new_imports = [node for node in imports if node.names]
 
-    stats['removed_imports'] += (
-        removed_import_count - stats['names_from_star'] +
-        stats['star_imports_removed']
+    stats["removed_imports"] += (
+        removed_import_count
+        - stats["names_from_star"]
+        + stats["star_imports_removed"]
     )
 
     imports[:] = new_imports
@@ -276,8 +347,11 @@ def _dedupe_single_imports(import_nodes, stats):
         elif isinstance(import_node, ast.ImportFrom):
             assert len(import_node.names) == 1
             hash_key = (
-                import_node.module, import_node.level,
-                import_node.names[0].name, import_node.names[0].asname)
+                import_node.module,
+                import_node.level,
+                import_node.names[0].name,
+                import_node.names[0].asname,
+            )
         else:
             raise ValueError("not a node we expected: %s" % import_node)
 
@@ -293,7 +367,8 @@ def _dedupe_single_imports(import_nodes, stats):
         if seen[hash_key] is import_node:
             yield import_node
         else:
-            stats['removed_imports'] += 1
+            stats["removed_imports"] += 1
+
 
 def _as_single_imports(import_nodes, stats, expand_stars=False):
 
@@ -311,12 +386,12 @@ def _as_single_imports(import_nodes, stats, expand_stars=False):
                 )
         elif isinstance(import_node, ast.ImportFrom):
             for name in import_node.names:
-                if name.name == '*' and expand_stars:
+                if name.name == "*" and expand_stars:
                     stats["star_imports_removed"] += 1
                     ast_cls = type(name)
                     module = importlib.import_module(import_node.module)
-                    for star_name in getattr(module, '__all__', dir(module)):
-                        stats['names_from_star'] += 1
+                    for star_name in getattr(module, "__all__", dir(module)):
+                        stats["names_from_star"] += 1
                         yield ast.ImportFrom(
                             parent=import_node.parent,
                             depth=import_node.depth,
@@ -361,12 +436,13 @@ def _get_import_groups(imports, local_modules):
             module = import_node.module
             if import_node.nosort:
                 nosort.append(import_node)
-            elif import_node.level > 0:   # relative import
+            elif import_node.level > 0:  # relative import
                 locals_.add(import_node)
             elif not module or (
-                    local_modules and
-                    True in {module.startswith(mod)
-                             for mod in local_modules if mod}):
+                local_modules
+                and True
+                in {module.startswith(mod) for mod in local_modules if mod}
+            ):
                 locals_.add(import_node)
             elif module and _is_future(module):
                 future.add(import_node)
@@ -376,22 +452,21 @@ def _get_import_groups(imports, local_modules):
                 package.add(import_node)
 
             relative_prefix = LAST * import_node.level
-            mod_tokens = module.split(".") if module else ['']
+            mod_tokens = module.split(".") if module else [""]
             if mod_tokens:
                 mod_tokens[0] = relative_prefix + mod_tokens[0]
             else:
                 mod_tokens = [relative_prefix]
-            import_node._sort_key = tuple([
-                (token.lower(), token) for token in mod_tokens] +
-                [('', ''), (name.lower(), name)]
+            import_node._sort_key = tuple(
+                [(token.lower(), token) for token in mod_tokens]
+                + [("", ""), (name.lower(), name)]
             )
         else:
             if import_node.nosort:
                 nosort.append(import_node)
-            elif local_modules and \
-                    True in {
-                        name.startswith(mod) for mod in local_modules if mod
-                    }:
+            elif local_modules and True in {
+                name.startswith(mod) for mod in local_modules if mod
+            }:
                 locals_.add(import_node)
             elif _is_std_lib(name):
                 stdlib.add(import_node)
@@ -412,11 +487,12 @@ def _get_import_groups(imports, local_modules):
 def _lines_as_buffer(lines):
     return "\n".join(lines) + "\n"
 
+
 STDLIB = None
 
 
 def _is_future(module):
-    return module == '__future__'
+    return module == "__future__"
 
 
 def _is_std_lib(module):
@@ -438,18 +514,24 @@ def _get_stdlib_names_zimports():
 
     # zzzeek uses 'import test' in some test suites and it's some kind of
     # fake stdlib thing
-    not_stdlib = {'test'}
+    not_stdlib = {"test"}
 
     # https://stackoverflow.com/a/37243423/34549
     # Get list of the loaded source modules on sys.path.
-    modules = {module
-               for _, module, package in list(pkgutil.iter_modules())
-               if package is False}
+    modules = {
+        module
+        for _, module, package in list(pkgutil.iter_modules())
+        if package is False
+    }
 
     # Glob all the 'top_level.txt' files installed under site-packages.
-    site_packages = glob.iglob(os.path.join(
-        os.path.dirname(os.__file__) + '/site-packages',
-        '*-info', 'top_level.txt'))
+    site_packages = glob.iglob(
+        os.path.join(
+            os.path.dirname(os.__file__) + "/site-packages",
+            "*-info",
+            "top_level.txt",
+        )
+    )
 
     # Read the files for the import names and remove them from the
     # modules list.
@@ -464,6 +546,7 @@ def _get_stdlib_names_zimports():
 
     return set(top_level_libs + list(modules | system_modules)) - not_stdlib
 
+
 _get_stdlib_names = _get_stdlib_names_f8_import_order
 
 
@@ -471,31 +554,43 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "-m", "--module", type=str, default="",
+        "-m",
+        "--module",
+        type=str,
+        default="",
         help="module prefix indicating local import "
-             "(can be multiple comma separated)")
-    parser.add_argument(
-        "-k", "--keep-unused", action="store_true",
-        help="keep unused imports even though detected as unused"
+        "(can be multiple comma separated)",
     )
     parser.add_argument(
-        "--heuristic-unused", type=int,
+        "-k",
+        "--keep-unused",
+        action="store_true",
+        help="keep unused imports even though detected as unused",
+    )
+    parser.add_argument(
+        "--heuristic-unused",
+        type=int,
         help="Remove unused imports only if number of imports is "
-        "less than <HEURISTIC_UNUSED> percent of the total lines of code"
+        "less than <HEURISTIC_UNUSED> percent of the total lines of code",
     )
     parser.add_argument(
-        "-s", "--statsonly", action="store_true",
-        help="don't write or display anything except the file stats"
+        "-s",
+        "--statsonly",
+        action="store_true",
+        help="don't write or display anything except the file stats",
     )
     parser.add_argument(
-        "-e", "--expand-stars", action="store_true",
+        "-e",
+        "--expand-stars",
+        action="store_true",
         help="Expand star imports into the names in the actual module, which "
-        "can then have unused names removed.  Requires modules can be imported"
+        "can then have unused names removed.  Requires modules can be "
+        "imported",
     )
     parser.add_argument(
-        "-i", "--inplace", action="store_true",
-        help="modify file in place")
-    parser.add_argument('filename', nargs="+")
+        "-i", "--inplace", action="store_true", help="modify file in place"
+    )
+    parser.add_argument("filename", nargs="+")
 
     options = parser.parse_args(argv)
 
@@ -506,37 +601,46 @@ def main(argv=None):
         if options.keep_unused:
             if options.heuristic_unused:
                 raise Exception(
-                    "keep-unused and heuristic-unused are mutually exclusive")
+                    "keep-unused and heuristic-unused are mutually exclusive"
+                )
             options.heuristic_unused = 0
         result, stats = _rewrite_source(
-            filename, source_lines, options.module,
+            filename,
+            source_lines,
+            options.module,
             keep_threshhold=options.heuristic_unused,
-            expand_stars=options.expand_stars)
+            expand_stars=options.expand_stars,
+        )
         totaltime = stats["totaltime"]
-        if not stats['is_changed']:
+        if not stats["is_changed"]:
             sys.stderr.write(
-                "[Unchanged]     %s (in %.4f sec)\n" %
-                (filename, totaltime)
+                "[Unchanged]     %s (in %.4f sec)\n" % (filename, totaltime)
             )
         else:
             sys.stderr.write(
                 "%s    %s ([%d%% of lines are imports] "
-                "[source +%dL/-%dL] [%d imports removed in %.4f sec])\n" %
-                ("[Writing]   " if options.inplace and not options.statsonly
-                 else "[Generating]",
-                 filename, stats['import_proportion'], stats['added'],
-                 stats['removed'],
-                 stats['removed_imports'], totaltime)
+                "[source +%dL/-%dL] [%d imports removed in %.4f sec])\n"
+                % (
+                    "[Writing]   "
+                    if options.inplace and not options.statsonly
+                    else "[Generating]",
+                    filename,
+                    stats["import_proportion"],
+                    stats["added"],
+                    stats["removed"],
+                    stats["removed_imports"],
+                    totaltime,
+                )
             )
 
         if not options.statsonly:
             if options.inplace:
-                if stats['is_changed']:
+                if stats["is_changed"]:
                     with open(filename, "w") as file_:
                         file_.write(_lines_as_buffer(result))
             else:
                 sys.stdout.write(_lines_as_buffer(result))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

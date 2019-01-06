@@ -1,23 +1,27 @@
-from sqlalchemy.testing import eq_, assert_raises, assert_raises_message
-import operator
-from sqlalchemy import *
-from sqlalchemy import exc as sa_exc, util
-from sqlalchemy.sql import compiler, table, column
-from sqlalchemy.engine import default
-from sqlalchemy.orm import *
-from sqlalchemy.orm import attributes
-
-from sqlalchemy.testing import eq_
-
-import sqlalchemy as sa
-from sqlalchemy import testing
-from sqlalchemy.testing import AssertsCompiledSQL, engines
-from sqlalchemy.testing.schema import Column
 from test.orm import _fixtures
 
+import sqlalchemy as sa
+from sqlalchemy import Column
+from sqlalchemy import exc as sa_exc
+from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
+from sqlalchemy import literal_column
+from sqlalchemy import String
+from sqlalchemy import Table
+from sqlalchemy.orm import aliased
+from sqlalchemy.orm import backref
+from sqlalchemy.orm import configure_mappers
+from sqlalchemy.orm import create_session
+from sqlalchemy.orm import mapper
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Session
+from sqlalchemy.orm import synonym
+from sqlalchemy.testing import assert_raises
+from sqlalchemy.testing import assert_raises_message
+from sqlalchemy.testing import AssertsCompiledSQL
+from sqlalchemy.testing import eq_
 from sqlalchemy.testing import fixtures
-
-from sqlalchemy.orm.util import join, outerjoin, with_parent
+from sqlalchemy.testing.schema import Column
 
 
 class QueryTest(_fixtures.FixtureTest):
