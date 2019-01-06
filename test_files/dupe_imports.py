@@ -11,6 +11,10 @@ from sqlalchemy.sql import select, cast, select, label
 from sqlalchemy import Sequence, Table, ForeignKey
 
 
+from .bat import dupe1
+from .bat import dupe1  # noqa
+from .bat import dupe1
+
 from .foo import assertions
 from ..foo import assertions
 from ..bar import bars

@@ -265,7 +265,10 @@ def _remove_unused_names(imports, warnings, stats):
 
 
 def _dedupe_single_imports(import_nodes, stats):
-    dupes = set()
+
+    seen = {}
+    orig_order = []
+
     for import_node in import_nodes:
         if isinstance(import_node, ast.Import):
             assert len(import_node.names) == 1
@@ -278,12 +281,19 @@ def _dedupe_single_imports(import_nodes, stats):
         else:
             raise ValueError("not a node we expected: %s" % import_node)
 
-        if hash_key in dupes:
-            stats['removed_imports'] += 1
-            continue
+        orig_order.append((import_node, hash_key))
+
+        if hash_key in seen:
+            if import_node.noqa and not seen[hash_key].noqa:
+                seen[hash_key] = import_node
         else:
-            dupes.add(hash_key)
+            seen[hash_key] = import_node
+
+    for import_node, hash_key in orig_order:
+        if seen[hash_key] is import_node:
             yield import_node
+        else:
+            stats['removed_imports'] += 1
 
 def _as_single_imports(import_nodes, stats, expand_stars=False):
 
