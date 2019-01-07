@@ -1,0 +1,6 @@
+-   id: zimports
+    name: zimports
+    description: Python import rewriter
+    entry: zimports
+    language: python
+    types: [python]

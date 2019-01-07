@@ -188,3 +188,18 @@ since the last run.  The plan is to have it check that it's inside a git
 repository where it will run through files to be committed if no filenames  are
 given.
 
+Usage as a ``git`` hook
+=======================
+
+``zimports`` can be used with the pre-commit_ git hooks framework.  To add
+the plugin, add the following to your ``.pre-commit-config.yaml``:
+
+.. code-block:: yaml
+
+    -   repo: https://github.com/sqlalchemyorg/zimports
+        rev: ''  # pick a hash or tag to point to
+        hooks:
+        -   id: zimports
+
+
+.. _pre-commit: https://pre-commit.com/
