@@ -47,6 +47,11 @@ flake8-import-order; only imports in column zero of the source file are
 counted, although imports that are on lines below other definitions are
 counted, which are moved up to the top section of the source file.
 
+.. note::  This application runs in **Python 3 only**.  It can reformat
+   imports for Python 2 code as well but internally it uses library
+   and language features only available in Python 3.
+
+
 zzzeek why are you writing one of these, there are a dozen pep8 import fixers
 =============================================================================
 
