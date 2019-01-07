@@ -24,14 +24,14 @@ roughly:
   removing all the unused names.
 
 The program now bolts itself on top of flake8-import-order, at
-https://github.com/PyCQA/flake8-import-order/, in order to reuse the
-import classification and sorting styles present there.    Without options
-given, the script will look directly for a setup.cfg file with a ``[flake8]``
-section and will consume flake8-import-order parameters
-``"application-import-names"``,  ``"application-package-names"``,
-and ``"import-order-style"``, to sort imports exactly as this linter
-then expects to find them.   All of the single-line import styles, e.g.
-google, cryptography, pycharm, should just work.
+`flake8-import-order <https://github.com/PyCQA/flake8-import-order/>`_,
+in order to reuse the import classification and sorting styles present there.
+Without options given, the script will look directly for a setup.cfg file with
+a ``[flake8]`` section and will consume flake8-import-order parameters
+``"application-import-names"``,  ``"application-package-names"``, and
+``"import-order-style"``, to sort imports exactly as this linter then expects
+to find them.   All of the single-line import styles, e.g. google,
+cryptography, pycharm, should just work.
 
 Special classifications can be given to imports, as either a "  # noqa" comment
 indicating the import should not be removed, and optionally
@@ -148,7 +148,7 @@ for an application that already has clean imports.   Running zimports on the
 source files of such an application should produce no changes, except for
 whatever source files were recently edited, and may have some changes to
 imports that need to be placed into the correct order. This usage model is
-similar to that of [Black](https://github.com/ambv/black), where you can run
+similar to that of `Black <https://github.com/ambv/black>`_, where you can run
 "zimports ." and it will find whatever files need adjusting and leave the rest
 alone.
 
