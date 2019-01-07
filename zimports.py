@@ -12,19 +12,17 @@ import sys
 import time
 
 import flake8_import_order as f8io
-from flake8_import_order.styles import Google as f8io_google
+from flake8_import_order.styles import lookup_entry_point
 import pyflakes.checker
 import pyflakes.messages
 
 
-def _rewrite_source(
-    options,
-    filename,
-    source_lines
-):
+def _rewrite_source(options, filename, source_lines):
 
     keep_threshhold = options.heuristic_unused
     expand_stars = options.expand_stars
+    style_entry_point = lookup_entry_point(options.style)
+    style = style_entry_point.load()
 
     stats = {
         "starttime": time.time(),
@@ -63,7 +61,9 @@ def _rewrite_source(
     )
 
     on_singleline = _write_source(
-        filename, source_lines, [imports], import_gap_lines, imports_start_on
+        filename, source_lines, imports, [],
+        import_gap_lines, imports_start_on,
+        style
     )
     # now parse again.  Because pyflakes won't tell us about unused
     # imports that are not the first import, we had to flatten first.
@@ -92,16 +92,16 @@ def _rewrite_source(
 
     stats["import_line_delta"] = len(imports) - original_imports
 
-    future, stdlib, package, nosort, locals_ = _get_import_groups(
-        imports, options.application_import_names
-    )
+    sorted_imports, nosort_imports = sort_imports(style, imports)
 
     rewritten = _write_source(
         filename,
         source_lines,
-        [future, stdlib, package, locals_, nosort],
+        sorted_imports,
+        nosort_imports,
         import_gap_lines,
         imports_start_on,
+        style
     )
 
     differ = list(difflib.Differ().compare(source_lines, rewritten))
@@ -162,23 +162,34 @@ def _is_whitespace_or_comment(line):
 
 
 def _write_source(
-    filename, source_lines, grouped_imports, import_gap_lines, imports_start_on
+    filename,
+    source_lines,
+    imports,
+    nosort_imports,
+    import_gap_lines,
+    imports_start_on,
+    style,
 ):
     buf = []
-    has_imports = False
+    previous_import = None
     for lineno, line in enumerate(source_lines, 1):
         if lineno == imports_start_on:
-            for j, imports in enumerate(grouped_imports):
-                buf.extend(
-                    _write_singlename_import(import_node)
-                    for import_node in imports
-                )
-                if imports:
-                    has_imports = True
-                    buf.append("")  # at end of import group
+            for import_node in imports:
+                if (
+                    previous_import is not None
+                    and not style.same_section(
+                        previous_import, import_node
+                    )
+                ):
+                    buf.append("")
+                previous_import = import_node
+                buf.append(_write_singlename_import(import_node))
 
-            if has_imports:
-                del buf[-1]  # delete last whitespace following imports
+            for import_node in nosort_imports:
+                if previous_import is not None:
+                    buf.append("")
+                    previous_import = None
+                buf.append(_write_singlename_import(import_node))
 
         if lineno not in import_gap_lines:
             buf.append(line.rstrip())
@@ -206,18 +217,33 @@ def _write_singlename_import(import_node):
             " nosort" if import_node.nosort else "",
         )
 
-class ClassifiedImport(collections.namedtuple(
-    'ClassifiedImport',
-    ['type', 'is_from', 'modules', 'names', 'lineno', 'level', 'package',
-     'ast_names', 'render_ast_names', 'noqa', 'nosort'],
-)):
+
+class ClassifiedImport(
+    collections.namedtuple(
+        "ClassifiedImport",
+        [
+            "type",
+            "is_from",
+            "modules",
+            "names",
+            "lineno",
+            "level",
+            "package",
+            "ast_names",
+            "render_ast_names",
+            "noqa",
+            "nosort",
+        ],
+    )
+):
     def __hash__(self):
         return hash((self.type, self.is_from, self.lineno))
 
     def __eq__(self, other):
         return (
-            self.type == other.type and self.is_from == other.is_from and
-            self.lineno == other.lineno
+            self.type == other.type
+            and self.is_from == other.is_from
+            and self.lineno == other.lineno
         )
 
     @property
@@ -230,27 +256,24 @@ class ClassifiedImport(collections.namedtuple(
             return [
                 (
                     (
-                        (
-                            "." * self.level
-                        )
-                        + (
-                            self.modules[0] + "."
-                            if self.modules[0] else "")
+                        ("." * self.level)
+                        + (self.modules[0] + "." if self.modules[0] else "")
                         + (
                             "%s as %s" % (ast_name.name, ast_name.asname)
-                            if ast_name.asname else ast_name.name
+                            if ast_name.asname
+                            else ast_name.name
                         )
                     ),
-                    ast_name
+                    ast_name,
                 )
                 for ast_name in self.ast_names
             ]
 
-class ImportVisitor(f8io.ImportVisitor):
 
+class ImportVisitor(f8io.ImportVisitor):
     def __init__(
-            self, source_lines,
-            application_import_names, application_package_names):
+        self, source_lines, application_import_names, application_package_names
+    ):
         self.imports = []
         self.source_lines = source_lines
         self.application_import_names = frozenset(application_import_names)
@@ -276,15 +299,23 @@ class ImportVisitor(f8io.ImportVisitor):
                 type_ = f8io.ImportType.MIXED
             noqa, nosort = self._get_flags(node.lineno)
             classified_import = ClassifiedImport(
-                type_, False, modules, [], node.lineno, 0,
+                type_,
+                False,
+                modules,
+                [],
+                node.lineno,
+                0,
                 f8io.root_package_name(modules[0]),
-                node.names, list(node.names), noqa, nosort
+                node.names,
+                list(node.names),
+                noqa,
+                nosort,
             )
             self.imports.append(classified_import)
 
     def visit_ImportFrom(self, node):  # noqa: N802
         if node.col_offset == 0:
-            module = node.module or ''
+            module = node.module or ""
             if node.level > 0:
                 type_ = f8io.ImportType.APPLICATION_RELATIVE
             else:
@@ -292,15 +323,24 @@ class ImportVisitor(f8io.ImportVisitor):
             names = [alias.name for alias in node.names]
             noqa, nosort = self._get_flags(node.lineno)
             classified_import = ClassifiedImport(
-                type_, True, [module], names,
-                node.lineno, node.level,
+                type_,
+                True,
+                [module],
+                names,
+                node.lineno,
+                node.level,
                 f8io.root_package_name(module),
-                node.names, list(node.names), noqa, nosort
+                node.names,
+                list(node.names),
+                noqa,
+                nosort,
             )
             self.imports.append(classified_import)
 
+
 def _parse_toplevel_imports(
-        options, filename, source_lines, drill_for_warnings=False):
+    options, filename, source_lines, drill_for_warnings=False
+):
     source = "\n".join(source_lines)
 
     tree = ast.parse(source, filename)
@@ -319,7 +359,8 @@ def _parse_toplevel_imports(
     f8io_visitor = ImportVisitor(
         source_lines,
         options.application_import_names.split(","),
-        options.application_package_names.split(","))
+        options.application_package_names.split(","),
+    )
     f8io_visitor.visit(tree)
     imports = f8io_visitor.imports
     return imports, warnings_set, lines_with_code
@@ -410,7 +451,8 @@ def _dedupe_single_imports(import_nodes, stats):
             assert len(import_node.ast_names) == 1
             hash_key = (
                 import_node.ast_names[0].name,
-                import_node.ast_names[0].asname)
+                import_node.ast_names[0].asname,
+            )
         else:
             assert len(import_node.ast_names) == 1
             hash_key = (
@@ -444,10 +486,14 @@ def _as_single_imports(import_nodes, stats, expand_stars=False):
                     import_node.type,
                     import_node.is_from,
                     [ast_name.name],
-                    [], import_node.lineno,
-                    import_node.level, import_node.package,
-                    [ast_name], [ast_name], import_node.noqa,
-                    import_node.nosort
+                    [],
+                    import_node.lineno,
+                    import_node.level,
+                    import_node.package,
+                    [ast_name],
+                    [ast_name],
+                    import_node.noqa,
+                    import_node.nosort,
                 )
         else:
             for ast_name in import_node.ast_names:
@@ -468,7 +514,7 @@ def _as_single_imports(import_nodes, stats, expand_stars=False):
                             [ast_cls(star_name, asname=None)],
                             [ast_cls(star_name, asname=None)],
                             import_node.noqa,
-                            import_node.nosort
+                            import_node.nosort,
                         )
                 else:
                     yield ClassifiedImport(
@@ -482,15 +528,12 @@ def _as_single_imports(import_nodes, stats, expand_stars=False):
                         [ast_name],
                         [ast_name],
                         import_node.noqa,
-                        import_node.nosort
+                        import_node.nosort,
                     )
 
 
-def _get_import_groups(imports, local_modules):
-    future = set()
-    stdlib = set()
-    package = set()
-    locals_ = set()
+def sort_imports(style, imports):
+    tosort = []
     nosort = []
 
     for import_node in imports:
@@ -498,27 +541,11 @@ def _get_import_groups(imports, local_modules):
 
         if import_node.nosort:
             nosort.append(import_node)
-        elif import_node.type is f8io.ImportType.FUTURE:
-            future.add(import_node)
-        elif import_node.type is f8io.ImportType.STDLIB:
-            stdlib.add(import_node)
-        elif import_node.type in (
-                f8io.ImportType.APPLICATION,
-                f8io.ImportType.APPLICATION_RELATIVE):
-            locals_.add(import_node)
-        elif import_node.type in (
-                f8io.ImportType.THIRD_PARTY,
-                f8io.ImportType.APPLICATION_PACKAGE):
-            package.add(import_node)
         else:
-            assert False
+            tosort.append(import_node)
 
-    style = f8io_google
-    future = sorted(future, key=lambda n: style.import_key(n))
-    stdlib = sorted(stdlib, key=lambda n: style.import_key(n))
-    package = sorted(package, key=lambda n: style.import_key(n))
-    locals_ = sorted(locals_, key=lambda n: style.import_key(n))
-    return future, stdlib, package, nosort, locals_
+    sorted_ = sorted(tosort, key=lambda n: style.import_key(n))
+    return sorted_, nosort
 
 
 def _lines_with_newlines(lines):
@@ -535,11 +562,7 @@ def _run_file(options, filename):
                 "keep-unused and heuristic-unused are mutually exclusive"
             )
         options.heuristic_unused = 0
-    result, stats = _rewrite_source(
-        options,
-        filename,
-        source_lines,
-    )
+    result, stats = _rewrite_source(options, filename, source_lines)
     totaltime = stats["totaltime"]
     if not stats["is_changed"]:
         sys.stderr.write(
@@ -551,7 +574,8 @@ def _run_file(options, filename):
             "[source +%dL/-%dL] [%d imports removed in %.4f sec])\n"
             % (
                 "[Writing]   "
-                if not options.diff and not options.statsonly
+                if not options.diff
+                and not options.statsonly
                 and not options.stdout
                 else "[Generating]",
                 filename,
@@ -648,9 +672,7 @@ def main(argv=None):
         help="don't modify files, just dump out diffs",
     )
     parser.add_argument(
-        "--stdout",
-        action="store_true",
-        help="dump file output to stdout",
+        "--stdout", action="store_true", help="dump file output to stdout"
     )
     parser.add_argument("filename", nargs="+")
 

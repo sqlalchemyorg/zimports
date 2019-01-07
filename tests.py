@@ -27,14 +27,16 @@ class ImportsTest(unittest.TestCase):
             yield
 
     def _assert_file(
-        self, filename, opts=("--expand-star", "-m", "sqlalchemy")
+        self, filename, opts=("--expand-star", "-m", "sqlalchemy"),
+        checkfile=None
     ):
 
         with self._simulate_importlib(), self._capture_stdout() as buf:
             zimports.main(
                 ["test_files/%s" % filename] + ["--stdout"] + list(opts))
 
-        checkfile = filename.replace(".py", ".expected.py")
+        if checkfile is None:
+            checkfile = filename.replace(".py", ".expected.py")
         with open("test_files/%s" % checkfile) as file_:
             self.assertEqual(file_.read(), buf.getvalue())
 
@@ -49,6 +51,13 @@ class ImportsTest(unittest.TestCase):
 
     def test_star_imports_one(self):
         self._assert_file("star_imports.py")
+
+    def test_star_imports_one_cryptography(self):
+        self._assert_file(
+            "star_imports.py",
+            ["--style", "cryptography", "--expand-star", "-m", "sqlalchemy"],
+            checkfile="star_imports.cryptography.expected.py"
+        )
 
     def test_star_imports_two(self):
         self._assert_file("star_imports_two.py")
