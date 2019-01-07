@@ -12,6 +12,7 @@ import sys
 import time
 
 import flake8_import_order as f8io
+from flake8_import_order.styles import Google as f8io_google
 import pyflakes.checker
 import pyflakes.messages
 
@@ -21,7 +22,6 @@ def _rewrite_source(
     filename,
     source_lines
 ):
-
 
     keep_threshhold = options.heuristic_unused
     expand_stars = options.expand_stars
@@ -220,6 +220,32 @@ class ClassifiedImport(collections.namedtuple(
             self.lineno == other.lineno
         )
 
+    @property
+    def pyflakes_warning_keys(self):
+        # generate keys that match what pyflakes reports in its
+        # warning messages in order to match dupes found
+        if not self.is_from:
+            return [(ast_name.name, ast_name) for ast_name in self.ast_names]
+        else:
+            return [
+                (
+                    (
+                        (
+                            "." * self.level
+                        )
+                        + (
+                            self.modules[0] + "."
+                            if self.modules[0] else "")
+                        + (
+                            "%s as %s" % (ast_name.name, ast_name.asname)
+                            if ast_name.asname else ast_name.name
+                        )
+                    ),
+                    ast_name
+                )
+                for ast_name in self.ast_names
+            ]
+
 class ImportVisitor(f8io.ImportVisitor):
 
     def __init__(
@@ -354,32 +380,15 @@ def _remove_unused_names(imports, warnings, stats):
 
     removed_import_count = 0
     for import_node in imports:
-        if import_node.is_from:
-            warning_key = (
-                (
-                    "." * import_node.level
-                )
-                + (import_node.modules[0] + "." if import_node.modules[0] else "")
-                + ".".join(
-                    "%s as %s" % (name.name, name.asname)
-                    if name.asname
-                    else name.name
-                    for name in import_node.ast_names
-                )
-            )
-
-            if (warning_key, import_node.lineno) in remove_imports:
-                import_node.render_ast_names[:] = []
-                removed_import_count += 1
-        else:
-            new = [
-                name
-                for name in import_node.ast_names
-                if (name.name, import_node.lineno) not in remove_imports
-            ]
-
-            removed_import_count += len(import_node.ast_names) - len(new)
-            import_node.render_ast_names[:] = new
+        # generate a key that matches the key we get from
+        # pyflakes to match up
+        new = [
+            ast_name
+            for warning_key, ast_name in import_node.pyflakes_warning_keys
+            if (warning_key, import_node.lineno) not in remove_imports
+        ]
+        removed_import_count += len(import_node.ast_names) - len(new)
+        import_node.render_ast_names[:] = new
     new_imports = [node for node in imports if node.render_ast_names]
 
     stats["removed_imports"] += (
@@ -476,6 +485,7 @@ def _as_single_imports(import_nodes, stats, expand_stars=False):
                         import_node.nosort
                     )
 
+
 def _get_import_groups(imports, local_modules):
     future = set()
     stdlib = set()
@@ -483,90 +493,37 @@ def _get_import_groups(imports, local_modules):
     locals_ = set()
     nosort = []
 
-    LAST = chr(127)
-
-    local_modules = set(local_modules.split(","))
-
     for import_node in imports:
         assert len(import_node.ast_names) == 1
-        name = import_node.ast_names[0].name
 
-        if import_node.is_from:
-            module = import_node.modules[0]
-            if import_node.nosort:
-                nosort.append(import_node)
-            elif import_node.level > 0:  # relative import
-                locals_.add(import_node)
-            elif not module or (
-                local_modules
-                and True
-                in {module.startswith(mod) for mod in local_modules if mod}
-            ):
-                locals_.add(import_node)
-            elif module and _is_future(module):
-                future.add(import_node)
-            elif module and _is_std_lib(module):
-                stdlib.add(import_node)
-            else:
-                package.add(import_node)
-
-            relative_prefix = LAST * import_node.level
-            mod_tokens = module.split(".") if module else [""]
-            if mod_tokens:
-                mod_tokens[0] = relative_prefix + mod_tokens[0]
-            else:
-                mod_tokens = [relative_prefix]
-            import_node._sort_key = tuple(
-                [(token.lower(), token) for token in mod_tokens]
-                + [("", ""), (name.lower(), name)]
-            )
+        if import_node.nosort:
+            nosort.append(import_node)
+        elif import_node.type is f8io.ImportType.FUTURE:
+            future.add(import_node)
+        elif import_node.type is f8io.ImportType.STDLIB:
+            stdlib.add(import_node)
+        elif import_node.type in (
+                f8io.ImportType.APPLICATION,
+                f8io.ImportType.APPLICATION_RELATIVE):
+            locals_.add(import_node)
+        elif import_node.type in (
+                f8io.ImportType.THIRD_PARTY,
+                f8io.ImportType.APPLICATION_PACKAGE):
+            package.add(import_node)
         else:
-            if import_node.nosort:
-                nosort.append(import_node)
-            elif local_modules and True in {
-                name.startswith(mod) for mod in local_modules if mod
-            }:
-                locals_.add(import_node)
-            elif _is_std_lib(name):
-                stdlib.add(import_node)
-            else:
-                package.add(import_node)
+            assert False
 
-            import_node._sort_key = tuple(
-                (token.lower(), token) for token in name.split(".")
-            )
-
-    future = sorted(future, key=lambda n: n._sort_key)
-    stdlib = sorted(stdlib, key=lambda n: n._sort_key)
-    package = sorted(package, key=lambda n: n._sort_key)
-    locals_ = sorted(locals_, key=lambda n: n._sort_key)
+    style = f8io_google
+    future = sorted(future, key=lambda n: style.import_key(n))
+    stdlib = sorted(stdlib, key=lambda n: style.import_key(n))
+    package = sorted(package, key=lambda n: style.import_key(n))
+    locals_ = sorted(locals_, key=lambda n: style.import_key(n))
     return future, stdlib, package, nosort, locals_
 
 
 def _lines_with_newlines(lines):
     for line in lines:
         yield line + "\n"
-
-
-STDLIB = None
-
-
-def _is_future(module):
-    return module == "__future__"
-
-
-def _is_std_lib(module):
-    global STDLIB
-    if STDLIB is None:
-        STDLIB = _get_stdlib_names()
-
-    token = module.split(".")[0]
-    return token in STDLIB
-
-
-def _get_stdlib_names():
-    # hardcoded list
-    return f8io.STDLIB_NAMES
 
 
 def _run_file(options, filename):
