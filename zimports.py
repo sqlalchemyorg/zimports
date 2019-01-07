@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import argparse
 import ast
+import collections
 import configparser
 import difflib
 import importlib
@@ -10,18 +11,20 @@ import re
 import sys
 import time
 
-import flake8_import_order
+import flake8_import_order as f8io
 import pyflakes.checker
 import pyflakes.messages
 
 
 def _rewrite_source(
+    options,
     filename,
-    source_lines,
-    local_modules,
-    keep_threshhold=None,
-    expand_stars=False,
+    source_lines
 ):
+
+
+    keep_threshhold = options.heuristic_unused
+    expand_stars = options.expand_stars
 
     stats = {
         "starttime": time.time(),
@@ -33,7 +36,7 @@ def _rewrite_source(
     # parse the code.  get the imports and a collection of line numbers
     # we definitely don't want to discard
     imports, _, lines_with_code = _parse_toplevel_imports(
-        filename, source_lines
+        options, filename, source_lines
     )
 
     original_imports = len(imports)
@@ -65,7 +68,7 @@ def _rewrite_source(
     # now parse again.  Because pyflakes won't tell us about unused
     # imports that are not the first import, we had to flatten first.
     imports, warnings, lines_with_code = _parse_toplevel_imports(
-        filename, on_singleline, drill_for_warnings=True
+        options, filename, on_singleline, drill_for_warnings=True
     )
 
     # now remove unused names from the imports
@@ -90,7 +93,7 @@ def _rewrite_source(
     stats["import_line_delta"] = len(imports) - original_imports
 
     future, stdlib, package, nosort, locals_ = _get_import_groups(
-        imports, local_modules
+        imports, options.application_import_names
     )
 
     rewritten = _write_source(
@@ -183,8 +186,8 @@ def _write_source(
 
 
 def _write_singlename_import(import_node):
-    name = import_node.names[0]
-    if isinstance(import_node, ast.Import):
+    name = import_node.render_ast_names[0]
+    if not import_node.is_from:
         return "import %s%s%s" % (
             "%s as %s" % (name.name, name.asname)
             if name.asname
@@ -195,7 +198,7 @@ def _write_singlename_import(import_node):
     else:
         return "from %s%s import %s%s%s" % (
             "." * import_node.level,
-            import_node.module or "",
+            import_node.modules[0] or "",
             "%s as %s" % (name.name, name.asname)
             if name.asname
             else name.name,
@@ -203,8 +206,75 @@ def _write_singlename_import(import_node):
             " nosort" if import_node.nosort else "",
         )
 
+class ClassifiedImport(collections.namedtuple(
+    'ClassifiedImport',
+    ['type', 'is_from', 'modules', 'names', 'lineno', 'level', 'package',
+     'ast_names', 'render_ast_names', 'noqa', 'nosort'],
+)):
+    def __hash__(self):
+        return hash((self.type, self.is_from, self.lineno))
 
-def _parse_toplevel_imports(filename, source_lines, drill_for_warnings=False):
+    def __eq__(self, other):
+        return (
+            self.type == other.type and self.is_from == other.is_from and
+            self.lineno == other.lineno
+        )
+
+class ImportVisitor(f8io.ImportVisitor):
+
+    def __init__(
+            self, source_lines,
+            application_import_names, application_package_names):
+        self.imports = []
+        self.source_lines = source_lines
+        self.application_import_names = frozenset(application_import_names)
+        self.application_package_names = frozenset(application_package_names)
+
+    def _get_flags(self, lineno):
+        line = self.source_lines[lineno - 1].rstrip()
+        symbols = re.match(r".* # noqa( nosort)?", line)
+        noqa = nosort = False
+        if symbols:
+            noqa = True
+            if symbols.group(1):
+                nosort = True
+        return noqa, nosort
+
+    def visit_Import(self, node):  # noqa: N802
+        if node.col_offset == 0:
+            modules = [alias.name for alias in node.names]
+            types_ = {self._classify_type(module) for module in modules}
+            if len(types_) == 1:
+                type_ = types_.pop()
+            else:
+                type_ = f8io.ImportType.MIXED
+            noqa, nosort = self._get_flags(node.lineno)
+            classified_import = ClassifiedImport(
+                type_, False, modules, [], node.lineno, 0,
+                f8io.root_package_name(modules[0]),
+                node.names, list(node.names), noqa, nosort
+            )
+            self.imports.append(classified_import)
+
+    def visit_ImportFrom(self, node):  # noqa: N802
+        if node.col_offset == 0:
+            module = node.module or ''
+            if node.level > 0:
+                type_ = f8io.ImportType.APPLICATION_RELATIVE
+            else:
+                type_ = self._classify_type(module)
+            names = [alias.name for alias in node.names]
+            noqa, nosort = self._get_flags(node.lineno)
+            classified_import = ClassifiedImport(
+                type_, True, [module], names,
+                node.lineno, node.level,
+                f8io.root_package_name(module),
+                node.names, list(node.names), noqa, nosort
+            )
+            self.imports.append(classified_import)
+
+def _parse_toplevel_imports(
+        options, filename, source_lines, drill_for_warnings=False):
     source = "\n".join(source_lines)
 
     tree = ast.parse(source, filename)
@@ -212,8 +282,7 @@ def _parse_toplevel_imports(filename, source_lines, drill_for_warnings=False):
     lines_with_code = set(
         node.lineno for node in ast.walk(tree) if hasattr(node, "lineno")
     )
-    # running the Checker also creates the "node.parent"
-    # attribute which is helpful
+
     warnings = pyflakes.checker.Checker(tree, filename)
 
     if drill_for_warnings:
@@ -221,21 +290,12 @@ def _parse_toplevel_imports(filename, source_lines, drill_for_warnings=False):
     else:
         warnings_set = None
 
-    imports = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-        and isinstance(node.parent, ast.Module)
-    ]
-
-    for import_node in imports:
-        line = source_lines[import_node.lineno - 1].rstrip()
-        symbols = re.match(r".* # noqa( nosort)?", line)
-        import_node.noqa = import_node.nosort = False
-        if symbols:
-            import_node.noqa = True
-            if symbols.group(1):
-                import_node.nosort = True
+    f8io_visitor = ImportVisitor(
+        source_lines,
+        options.application_import_names.split(","),
+        options.application_package_names.split(","))
+    f8io_visitor.visit(tree)
+    imports = f8io_visitor.imports
     return imports, warnings_set, lines_with_code
 
 
@@ -294,35 +354,33 @@ def _remove_unused_names(imports, warnings, stats):
 
     removed_import_count = 0
     for import_node in imports:
-        if isinstance(import_node, ast.ImportFrom):
+        if import_node.is_from:
             warning_key = (
                 (
                     "." * import_node.level
-                    if isinstance(import_node, ast.ImportFrom)
-                    else ""
                 )
-                + (import_node.module + "." if import_node.module else "")
+                + (import_node.modules[0] + "." if import_node.modules[0] else "")
                 + ".".join(
                     "%s as %s" % (name.name, name.asname)
                     if name.asname
                     else name.name
-                    for name in import_node.names
+                    for name in import_node.ast_names
                 )
             )
 
             if (warning_key, import_node.lineno) in remove_imports:
-                import_node.names = []
+                import_node.render_ast_names[:] = []
                 removed_import_count += 1
         else:
             new = [
                 name
-                for name in import_node.names
+                for name in import_node.ast_names
                 if (name.name, import_node.lineno) not in remove_imports
             ]
 
-            removed_import_count += len(import_node.names) - len(new)
-            import_node.names[:] = new
-    new_imports = [node for node in imports if node.names]
+            removed_import_count += len(import_node.ast_names) - len(new)
+            import_node.render_ast_names[:] = new
+    new_imports = [node for node in imports if node.render_ast_names]
 
     stats["removed_imports"] += (
         removed_import_count
@@ -339,19 +397,19 @@ def _dedupe_single_imports(import_nodes, stats):
     orig_order = []
 
     for import_node in import_nodes:
-        if isinstance(import_node, ast.Import):
-            assert len(import_node.names) == 1
-            hash_key = (import_node.names[0].name, import_node.names[0].asname)
-        elif isinstance(import_node, ast.ImportFrom):
-            assert len(import_node.names) == 1
+        if not import_node.is_from:
+            assert len(import_node.ast_names) == 1
             hash_key = (
-                import_node.module,
-                import_node.level,
-                import_node.names[0].name,
-                import_node.names[0].asname,
-            )
+                import_node.ast_names[0].name,
+                import_node.ast_names[0].asname)
         else:
-            raise ValueError("not a node we expected: %s" % import_node)
+            assert len(import_node.ast_names) == 1
+            hash_key = (
+                import_node.modules[0],
+                import_node.level,
+                import_node.ast_names[0].name,
+                import_node.ast_names[0].asname,
+            )
 
         orig_order.append((import_node, hash_key))
 
@@ -371,49 +429,52 @@ def _dedupe_single_imports(import_nodes, stats):
 def _as_single_imports(import_nodes, stats, expand_stars=False):
 
     for import_node in import_nodes:
-        if isinstance(import_node, ast.Import):
-            for name in import_node.names:
-                yield ast.Import(
-                    parent=import_node.parent,
-                    depth=import_node.depth,
-                    names=[name],
-                    col_offset=import_node.col_offset,
-                    lineno=import_node.lineno,
-                    noqa=import_node.noqa,
-                    nosort=import_node.nosort,
+        if not import_node.is_from:
+            for ast_name in import_node.ast_names:
+                yield ClassifiedImport(
+                    import_node.type,
+                    import_node.is_from,
+                    [ast_name.name],
+                    [], import_node.lineno,
+                    import_node.level, import_node.package,
+                    [ast_name], [ast_name], import_node.noqa,
+                    import_node.nosort
                 )
-        elif isinstance(import_node, ast.ImportFrom):
-            for name in import_node.names:
-                if name.name == "*" and expand_stars:
+        else:
+            for ast_name in import_node.ast_names:
+                if ast_name.name == "*" and expand_stars:
                     stats["star_imports_removed"] += 1
-                    ast_cls = type(name)
-                    module = importlib.import_module(import_node.module)
+                    ast_cls = type(ast_name)
+                    module = importlib.import_module(import_node.modules[0])
                     for star_name in getattr(module, "__all__", dir(module)):
                         stats["names_from_star"] += 1
-                        yield ast.ImportFrom(
-                            parent=import_node.parent,
-                            depth=import_node.depth,
-                            module=import_node.module,
-                            level=import_node.level,
-                            names=[ast_cls(star_name, asname=None)],
-                            col_offset=import_node.col_offset,
-                            lineno=import_node.lineno,
-                            noqa=import_node.noqa,
-                            nosort=import_node.nosort,
+                        yield ClassifiedImport(
+                            import_node.type,
+                            import_node.is_from,
+                            import_node.modules,
+                            [star_name],
+                            import_node.lineno,
+                            import_node.level,
+                            import_node.package,
+                            [ast_cls(star_name, asname=None)],
+                            [ast_cls(star_name, asname=None)],
+                            import_node.noqa,
+                            import_node.nosort
                         )
                 else:
-                    yield ast.ImportFrom(
-                        parent=import_node.parent,
-                        depth=import_node.depth,
-                        module=import_node.module,
-                        level=import_node.level,
-                        names=[name],
-                        col_offset=import_node.col_offset,
-                        lineno=import_node.lineno,
-                        noqa=import_node.noqa,
-                        nosort=import_node.nosort,
+                    yield ClassifiedImport(
+                        import_node.type,
+                        import_node.is_from,
+                        import_node.modules,
+                        [ast_name.name],
+                        import_node.lineno,
+                        import_node.level,
+                        import_node.package,
+                        [ast_name],
+                        [ast_name],
+                        import_node.noqa,
+                        import_node.nosort
                     )
-
 
 def _get_import_groups(imports, local_modules):
     future = set()
@@ -427,11 +488,11 @@ def _get_import_groups(imports, local_modules):
     local_modules = set(local_modules.split(","))
 
     for import_node in imports:
-        assert len(import_node.names) == 1
-        name = import_node.names[0].name
+        assert len(import_node.ast_names) == 1
+        name = import_node.ast_names[0].name
 
-        if isinstance(import_node, ast.ImportFrom):
-            module = import_node.module
+        if import_node.is_from:
+            module = import_node.modules[0]
             if import_node.nosort:
                 nosort.append(import_node)
             elif import_node.level > 0:  # relative import
@@ -505,7 +566,7 @@ def _is_std_lib(module):
 
 def _get_stdlib_names():
     # hardcoded list
-    return flake8_import_order.STDLIB_NAMES
+    return f8io.STDLIB_NAMES
 
 
 def _run_file(options, filename):
@@ -518,11 +579,9 @@ def _run_file(options, filename):
             )
         options.heuristic_unused = 0
     result, stats = _rewrite_source(
+        options,
         filename,
         source_lines,
-        options.module,
-        keep_threshhold=options.heuristic_unused,
-        expand_stars=options.expand_stars,
     )
     totaltime = stats["totaltime"]
     if not stats["is_changed"]:
@@ -571,25 +630,35 @@ def main(argv=None):
     config = configparser.ConfigParser()
     config["flake8"] = {
         "application-import-names": "",
+        "application-package-names": "",
         "import-order-style": "google",
     }
     config.read("setup.cfg")
 
     parser.add_argument(
         "-m",
-        "--module",
+        "--application-import-names",
         type=str,
         default=config["flake8"]["application-import-names"],
-        help="module prefix indicating local import "
-        "(can be multiple comma separated).  "
-        "reads from [flake8] application-import-names by default.",
+        help="comma separated list of names that should be considered local "
+        "to the application.  reads from [flake8] application-import-names "
+        "by default.",
+    )
+    parser.add_argument(
+        "-p",
+        "--application-package-names",
+        type=str,
+        default=config["flake8"]["application-package-names"],
+        help="comma separated list of names that should be considered local "
+        "to the organization.  reads from [flake8] application-package-names "
+        "by default.",
     )
     parser.add_argument(
         "--style",
         type=str,
         default=config["flake8"]["import-order-style"],
         help="import order styling, reads from "
-        "[flake8] import-order-style by default.",
+        "[flake8] import-order-style by default, or defaults to 'google'",
     )
     parser.add_argument(
         "-k",
