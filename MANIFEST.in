@@ -1,6 +1,6 @@
 recursive-include test_files *.py
 
-include README* LICENSE
+include README* LICENSE *.yaml
 
 
 
