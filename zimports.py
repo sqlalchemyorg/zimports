@@ -2,12 +2,10 @@ from __future__ import print_function
 
 import argparse
 import ast
+import configparser
 import difflib
-import distutils
-import glob
 import importlib
 import os
-import pkgutil
 import re
 import sys
 import time
@@ -484,8 +482,9 @@ def _get_import_groups(imports, local_modules):
     return future, stdlib, package, nosort, locals_
 
 
-def _lines_as_buffer(lines):
-    return "\n".join(lines) + "\n"
+def _lines_with_newlines(lines):
+    for line in lines:
+        yield line + "\n"
 
 
 STDLIB = None
@@ -504,62 +503,93 @@ def _is_std_lib(module):
     return token in STDLIB
 
 
-def _get_stdlib_names_f8_import_order():
+def _get_stdlib_names():
     # hardcoded list
     return flake8_import_order.STDLIB_NAMES
 
 
-def _get_stdlib_names_zimports():
-    # guesswork, doesn't work completely
-
-    # zzzeek uses 'import test' in some test suites and it's some kind of
-    # fake stdlib thing
-    not_stdlib = {"test"}
-
-    # https://stackoverflow.com/a/37243423/34549
-    # Get list of the loaded source modules on sys.path.
-    modules = {
-        module
-        for _, module, package in list(pkgutil.iter_modules())
-        if package is False
-    }
-
-    # Glob all the 'top_level.txt' files installed under site-packages.
-    site_packages = glob.iglob(
-        os.path.join(
-            os.path.dirname(os.__file__) + "/site-packages",
-            "*-info",
-            "top_level.txt",
-        )
+def _run_file(options, filename):
+    with open(filename) as file_:
+        source_lines = [line.rstrip() for line in file_]
+    if options.keep_unused:
+        if options.heuristic_unused:
+            raise Exception(
+                "keep-unused and heuristic-unused are mutually exclusive"
+            )
+        options.heuristic_unused = 0
+    result, stats = _rewrite_source(
+        filename,
+        source_lines,
+        options.module,
+        keep_threshhold=options.heuristic_unused,
+        expand_stars=options.expand_stars,
     )
+    totaltime = stats["totaltime"]
+    if not stats["is_changed"]:
+        sys.stderr.write(
+            "[Unchanged]     %s (in %.4f sec)\n" % (filename, totaltime)
+        )
+    else:
+        sys.stderr.write(
+            "%s    %s ([%d%% of lines are imports] "
+            "[source +%dL/-%dL] [%d imports removed in %.4f sec])\n"
+            % (
+                "[Writing]   "
+                if not options.diff and not options.statsonly
+                and not options.stdout
+                else "[Generating]",
+                filename,
+                stats["import_proportion"],
+                stats["added"],
+                stats["removed"],
+                stats["removed_imports"],
+                totaltime,
+            )
+        )
 
-    # Read the files for the import names and remove them from the
-    # modules list.
-    modules -= {open(txt).read().strip() for txt in site_packages}
-
-    # Get the system packages.
-    system_modules = set(sys.builtin_module_names)
-
-    # Get the just the top-level packages from the python install.
-    python_root = distutils.sysconfig.get_python_lib(standard_lib=True)
-    _, top_level_libs, _ = list(os.walk(python_root))[0]
-
-    return set(top_level_libs + list(modules | system_modules)) - not_stdlib
-
-
-_get_stdlib_names = _get_stdlib_names_f8_import_order
+    if not options.statsonly:
+        if options.stdout:
+            sys.stdout.writelines(_lines_with_newlines(result))
+        elif options.diff:
+            sys.stdout.writelines(
+                difflib.unified_diff(
+                    list(_lines_with_newlines(source_lines)),
+                    list(_lines_with_newlines(result)),
+                    fromfile=filename,
+                    tofile=filename,
+                )
+            )
+        else:
+            if stats["is_changed"]:
+                with open(filename, "w") as file_:
+                    file_.writelines(_lines_with_newlines(result))
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
 
+    config = configparser.ConfigParser()
+    config["flake8"] = {
+        "application-import-names": "",
+        "import-order-style": "google",
+    }
+    config.read("setup.cfg")
+
     parser.add_argument(
         "-m",
         "--module",
         type=str,
-        default="",
+        default=config["flake8"]["application-import-names"],
         help="module prefix indicating local import "
-        "(can be multiple comma separated)",
+        "(can be multiple comma separated).  "
+        "reads from [flake8] application-import-names by default.",
+    )
+    parser.add_argument(
+        "--style",
+        type=str,
+        default=config["flake8"]["import-order-style"],
+        help="import order styling, reads from "
+        "[flake8] import-order-style by default.",
     )
     parser.add_argument(
         "-k",
@@ -574,7 +604,6 @@ def main(argv=None):
         "less than <HEURISTIC_UNUSED> percent of the total lines of code",
     )
     parser.add_argument(
-        "-s",
         "--statsonly",
         action="store_true",
         help="don't write or display anything except the file stats",
@@ -588,58 +617,28 @@ def main(argv=None):
         "imported",
     )
     parser.add_argument(
-        "-i", "--inplace", action="store_true", help="modify file in place"
+        "--diff",
+        action="store_true",
+        help="don't modify files, just dump out diffs",
+    )
+    parser.add_argument(
+        "--stdout",
+        action="store_true",
+        help="dump file output to stdout",
     )
     parser.add_argument("filename", nargs="+")
 
     options = parser.parse_args(argv)
 
-    _get_stdlib_names()
     for filename in options.filename:
-        with open(filename) as file_:
-            source_lines = [line.rstrip() for line in file_]
-        if options.keep_unused:
-            if options.heuristic_unused:
-                raise Exception(
-                    "keep-unused and heuristic-unused are mutually exclusive"
-                )
-            options.heuristic_unused = 0
-        result, stats = _rewrite_source(
-            filename,
-            source_lines,
-            options.module,
-            keep_threshhold=options.heuristic_unused,
-            expand_stars=options.expand_stars,
-        )
-        totaltime = stats["totaltime"]
-        if not stats["is_changed"]:
-            sys.stderr.write(
-                "[Unchanged]     %s (in %.4f sec)\n" % (filename, totaltime)
-            )
-        else:
-            sys.stderr.write(
-                "%s    %s ([%d%% of lines are imports] "
-                "[source +%dL/-%dL] [%d imports removed in %.4f sec])\n"
-                % (
-                    "[Writing]   "
-                    if options.inplace and not options.statsonly
-                    else "[Generating]",
-                    filename,
-                    stats["import_proportion"],
-                    stats["added"],
-                    stats["removed"],
-                    stats["removed_imports"],
-                    totaltime,
-                )
-            )
+        if os.path.isdir(filename):
+            for root, dirs, files in os.walk(filename):
+                for file in files:
+                    if file.endswith(".py"):
+                        _run_file(options, os.path.join(root, file))
 
-        if not options.statsonly:
-            if options.inplace:
-                if stats["is_changed"]:
-                    with open(filename, "w") as file_:
-                        file_.write(_lines_as_buffer(result))
-            else:
-                sys.stdout.write(_lines_as_buffer(result))
+        else:
+            _run_file(options, filename)
 
 
 if __name__ == "__main__":

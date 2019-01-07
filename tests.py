@@ -31,7 +31,8 @@ class ImportsTest(unittest.TestCase):
     ):
 
         with self._simulate_importlib(), self._capture_stdout() as buf:
-            zimports.main(["test_files/%s" % filename] + list(opts))
+            zimports.main(
+                ["test_files/%s" % filename] + ["--stdout"] + list(opts))
 
         checkfile = filename.replace(".py", ".expected.py")
         with open("test_files/%s" % checkfile) as file_:
