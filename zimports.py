@@ -674,7 +674,8 @@ def main(argv=None):
     parser.add_argument(
         "--stdout", action="store_true", help="dump file output to stdout"
     )
-    parser.add_argument("filename", nargs="+")
+    parser.add_argument(
+         "filename", nargs="+", help="Python filename(s) or directories")
 
     options = parser.parse_args(argv)
 
