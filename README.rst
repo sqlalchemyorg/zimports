@@ -23,15 +23,15 @@ roughly:
   explicit names, by importing all the names from each target module and then
   removing all the unused names.
 
-The program now bolts itself on top of flake8-import-order, at
-`flake8-import-order <https://github.com/PyCQA/flake8-import-order/>`_,
-in order to reuse the import classification and sorting styles present there.
-Without options given, the script will look directly for a setup.cfg file with
-a ``[flake8]`` section and will consume flake8-import-order parameters
-``"application-import-names"``,  ``"application-package-names"``, and
-``"import-order-style"``, to sort imports exactly as this linter then expects
-to find them.   All of the single-line import styles, e.g. google,
-cryptography, pycharm, should just work.
+The program currently bolts itself on top of `flake8-import-order
+<https://github.com/PyCQA/flake8-import-order/>`_, in order to reuse the import
+classification and sorting styles that tool provides. Without options given,
+the script will look directly for a ``setup.cfg`` file with a ``[flake8]``
+section and will consume flake8-import-order parameters ``"application-import-
+names"``, ``"application-package-names"``, and ``"import-order-style"``, to
+sort imports exactly as this linter then expects to find them.   All of the
+single-line import styles, e.g. google, cryptography, pycharm, should just
+work.
 
 Special classifications can be given to imports, as either a "  # noqa" comment
 indicating the import should not be removed, and optionally
