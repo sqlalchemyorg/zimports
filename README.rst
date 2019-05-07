@@ -196,8 +196,9 @@ the plugin, add the following to your ``.pre-commit-config.yaml``:
 
 .. code-block:: yaml
 
-    -   repo: https://github.com/sqlalchemyorg/zimports
-        rev: ''  # pick a hash or tag to point to
+    repos:
+    -   repo: https://github.com/sqlalchemyorg/zimports/
+        rev: master
         hooks:
         -   id: zimports
 
