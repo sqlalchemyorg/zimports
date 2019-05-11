@@ -192,13 +192,15 @@ Usage as a ``git`` hook
 =======================
 
 ``zimports`` can be used with the pre-commit_ git hooks framework.  To add
-the plugin, add the following to your ``.pre-commit-config.yaml``:
+the plugin, add the following to your ``.pre-commit-config.yaml``.  Note
+the ``rev:`` attribute refers to a git tag or revision number of
+zimports to be used, such as ``"master"`` or ``"0.1.3"``:
 
 .. code-block:: yaml
 
     repos:
     -   repo: https://github.com/sqlalchemyorg/zimports/
-        rev: master
+        rev: 0.1.3
         hooks:
         -   id: zimports
 
