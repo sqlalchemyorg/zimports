@@ -104,6 +104,8 @@ The script can run without any configuration, options are as follows::
                           [flake8] application-package-names by default.
     --style STYLE         import order styling, reads from [flake8] import-
                           order-style by default, or defaults to 'google'
+    --force-single-line   If set to true - instead of wrapping multi-line from style imports,
+                          each import will be forced to display on its own line
     -k, --keep-unused     keep unused imports even though detected as unused
     --heuristic-unused HEURISTIC_UNUSED
                           Remove unused imports only if number of imports is
