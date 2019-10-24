@@ -53,14 +53,15 @@ def _rewrite_source(options, filename, source_lines):
 
     # flatten imports into single import per line and rewrite
     # full source
-    imports = list(
-        _dedupe_single_imports(
-            _as_single_imports(imports, stats, expand_stars=expand_stars),
-            stats,
+    if not options.multi_imports:
+        imports = list(
+            _dedupe_single_imports(
+                _as_single_imports(imports, stats, expand_stars=expand_stars),
+                stats,
+            )
         )
-    )
 
-    on_singleline = _write_source(
+    on_source_lines = _write_source(
         source_lines, imports, [],
         import_gap_lines, imports_start_on,
         style
@@ -68,7 +69,7 @@ def _rewrite_source(options, filename, source_lines):
     # now parse again.  Because pyflakes won't tell us about unused
     # imports that are not the first import, we had to flatten first.
     imports, warnings, lines_with_code = _parse_toplevel_imports(
-        options, filename, on_singleline, drill_for_warnings=True
+        options, filename, on_source_lines, drill_for_warnings=True
     )
 
     # now remove unused names from the imports
@@ -92,7 +93,7 @@ def _rewrite_source(options, filename, source_lines):
 
     stats["import_line_delta"] = len(imports) - original_imports
 
-    sorted_imports, nosort_imports = sort_imports(style, imports)
+    sorted_imports, nosort_imports = sort_imports(style, imports, options)
 
     rewritten = _write_source(
         source_lines,
@@ -181,26 +182,32 @@ def _write_source(
                 ):
                     buf.append("")
                 previous_import = import_node
-                buf.append(_write_singlename_import(import_node))
+                buf.append(_write_import(import_node))
 
             for import_node in nosort_imports:
                 if previous_import is not None:
                     buf.append("")
                     previous_import = None
-                buf.append(_write_singlename_import(import_node))
+                buf.append(_write_import(import_node))
 
         if lineno not in import_gap_lines:
             buf.append(line.rstrip())
     return buf
 
 
-def _write_singlename_import(import_node):
-    name = import_node.render_ast_names[0]
+def _write_import(import_node):
+    names = import_node.render_ast_names
+    modules = []
+    for name in names:
+        if name.asname:
+            modules.append("%s as %s" % (name.name, name.asname))
+        else:
+            modules.append(name.name)
+    modules.sort(key=lambda x: x.lower())
+    modules = ", ".join(modules)
     if not import_node.is_from:
         return "import %s%s%s" % (
-            "%s as %s" % (name.name, name.asname)
-            if name.asname
-            else name.name,
+            modules,
             "  # noqa" if import_node.noqa else "",
             " nosort" if import_node.nosort else "",
         )
@@ -208,9 +215,7 @@ def _write_singlename_import(import_node):
         return "from %s%s import %s%s%s" % (
             "." * import_node.level,
             import_node.modules[0] or "",
-            "%s as %s" % (name.name, name.asname)
-            if name.asname
-            else name.name,
+            modules,
             "  # noqa" if import_node.noqa else "",
             " nosort" if import_node.nosort else "",
         )
@@ -530,12 +535,12 @@ def _as_single_imports(import_nodes, stats, expand_stars=False):
                     )
 
 
-def sort_imports(style, imports):
+def sort_imports(style, imports, options):
     tosort = []
     nosort = []
 
     for import_node in imports:
-        assert len(import_node.ast_names) == 1
+        assert options.multi_imports or len(import_node.ast_names) == 1
 
         if import_node.nosort:
             nosort.append(import_node)
@@ -638,6 +643,11 @@ def main(argv=None):
         default=config["flake8"]["import-order-style"],
         help="import order styling, reads from "
         "[flake8] import-order-style by default, or defaults to 'google'",
+    )
+    parser.add_argument(
+        "--multi-imports",
+        action="store_true",
+        help="If set, multiple imports can exist on one line"
     )
     parser.add_argument(
         "-k",

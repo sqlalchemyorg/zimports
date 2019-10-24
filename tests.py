@@ -92,6 +92,9 @@ class ImportsTest(unittest.TestCase):
     def test_whitespace3(self):
         self._assert_file("whitespace3.py")
 
+    def test_multiple_imports(self):
+        self._assert_file("multi_imports.py", opts=("--multi-imports", ))
+
 
 sqlalchemy_names = [
     "alias",
