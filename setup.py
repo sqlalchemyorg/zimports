@@ -6,7 +6,7 @@ readme = os.path.join(os.path.dirname(__file__), 'README.rst')
 
 setup(
     name='zimports',
-    version="0.1.3",
+    version="0.2.0",
     description="yet another import fixing tool",
     long_description=open(readme).read(),
     classifiers=[
