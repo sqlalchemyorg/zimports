@@ -1,5 +1,6 @@
 from . import bar, foo
+from . import cat, loop
 
 
 def go():
-    return foo() + bar()
+    return foo() + bar() + cat() + loop()
