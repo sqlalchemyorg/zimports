@@ -53,7 +53,7 @@ def _rewrite_source(options, filename, source_lines):
 
     # flatten imports into single import per line and rewrite
     # full source
-    if options.force_single_line:
+    if not options.multi_imports:
         imports = list(
             _dedupe_single_imports(
                 _as_single_imports(imports, stats, expand_stars=expand_stars),
@@ -540,8 +540,7 @@ def sort_imports(style, imports, options):
     nosort = []
 
     for import_node in imports:
-        if options.force_single_line:
-            assert len(import_node.ast_names) == 1
+        assert options.multi_imports or len(import_node.ast_names) == 1
 
         if import_node.nosort:
             nosort.append(import_node)
@@ -646,12 +645,9 @@ def main(argv=None):
         "[flake8] import-order-style by default, or defaults to 'google'",
     )
     parser.add_argument(
-        "-f",
-        "--force-single-line",
-        type=bool,
-        default=True,
-        help="If set to true - instead of wrapping multi-line from style imports, "
-             "each import will be forced to display on its own line"
+        "--multi-imports",
+        action="store_true",
+        help="If set, multiple imports can exist on one line"
     )
     parser.add_argument(
         "-k",
