@@ -61,7 +61,7 @@ def _rewrite_source(options, filename, source_lines):
     )
 
     on_singleline = _write_source(
-        filename, source_lines, imports, [],
+        source_lines, imports, [],
         import_gap_lines, imports_start_on,
         style
     )
@@ -95,7 +95,6 @@ def _rewrite_source(options, filename, source_lines):
     sorted_imports, nosort_imports = sort_imports(style, imports)
 
     rewritten = _write_source(
-        filename,
         source_lines,
         sorted_imports,
         nosort_imports,
@@ -162,7 +161,6 @@ def _is_whitespace_or_comment(line):
 
 
 def _write_source(
-    filename,
     source_lines,
     imports,
     nosort_imports,
