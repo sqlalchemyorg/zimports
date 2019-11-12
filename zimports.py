@@ -53,13 +53,18 @@ def _rewrite_source(options, filename, source_lines):
 
     # flatten imports into single import per line and rewrite
     # full source
-    if not options.multi_imports:
-        imports = list(
-            _dedupe_single_imports(
-                _as_single_imports(imports, stats, expand_stars=expand_stars),
-                stats,
+    expanded_imports = []
+    for import_node in imports:
+        if options.multi_imports and import_node.is_from:
+            expanded_imports.append(import_node)
+        else:
+            expanded_imports += list(
+                _dedupe_single_imports(
+                    _as_single_imports([import_node], stats, expand_stars=expand_stars),
+                    stats,
+                )
             )
-        )
+    imports[:] = expanded_imports
 
     on_source_lines = _write_source(
         source_lines, imports, [],
