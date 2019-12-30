@@ -21,7 +21,7 @@ setup(
     py_modules=('zimports', 'tests'),
     zip_safe=False,
     install_requires=['pyflakes', 'flake8-import-order'],
-    tests_require=['mock'],
+    tests_require=[],
     entry_points={
         'console_scripts': ['zimports = zimports:main'],
     }

@@ -82,45 +82,51 @@ Usage
 
 The script can run without any configuration, options are as follows::
 
-  $ zimports --help
-  usage: zimports [-h] [-m APPLICATION_IMPORT_NAMES]
-                  [-p APPLICATION_PACKAGE_NAMES] [--style STYLE] [-k]
-                  [--heuristic-unused HEURISTIC_UNUSED] [--statsonly] [-e]
-                  [--diff] [--stdout]
-                  filename [filename ...]
+usage: zimports [-h] [-m APPLICATION_IMPORT_NAMES]
+                [-p APPLICATION_PACKAGE_NAMES] [--style STYLE]
+                [--multi-imports] [--max-line-length MAX_LINE_LENGTH] [-k]
+                [--heuristic-unused HEURISTIC_UNUSED] [--statsonly] [-e]
+                [--diff] [--stdout]
+                filename [filename ...]
 
-  positional arguments:
-    filename              Python filename(s) or directories
+positional arguments:
+  filename              Python filename(s) or directories
 
-  optional arguments:
-    -h, --help            show this help message and exit
-    -m APPLICATION_IMPORT_NAMES, --application-import-names APPLICATION_IMPORT_NAMES
-                          comma separated list of names that should be
-                          considered local to the application. reads from
-                          [flake8] application-import-names by default.
-    -p APPLICATION_PACKAGE_NAMES, --application-package-names APPLICATION_PACKAGE_NAMES
-                          comma separated list of names that should be
-                          considered local to the organization. reads from
-                          [flake8] application-package-names by default.
-    --style STYLE         import order styling, reads from [flake8] import-
-                          order-style by default, or defaults to 'google'
-    --multi-imports       If set, multiple imports can exist on one line
-    -k, --keep-unused     keep unused imports even though detected as unused
-    --heuristic-unused HEURISTIC_UNUSED
-                          Remove unused imports only if number of imports is
-                          less than <HEURISTIC_UNUSED> percent of the total
-                          lines of code
-    --statsonly           don't write or display anything except the file stats
-    -e, --expand-stars    Expand star imports into the names in the actual
-                          module, which can then have unused names removed.
-                          Requires modules can be imported
-    --diff                don't modify files, just dump out diffs
-    --stdout              dump file output to stdout
+optional arguments:
+  -h, --help            show this help message and exit
+  -m APPLICATION_IMPORT_NAMES, --application-import-names APPLICATION_IMPORT_NAMES
+                        comma separated list of names that should be
+                        considered local to the application. reads from
+                        [flake8] application-import-names by default.
+  -p APPLICATION_PACKAGE_NAMES, --application-package-names APPLICATION_PACKAGE_NAMES
+                        comma separated list of names that should be
+                        considered local to the organization. reads from
+                        [flake8] application-package-names by default.
+  --style STYLE         import order styling, reads from [flake8] import-
+                        order-style by default, or defaults to 'google'
+  --multi-imports       If set, multiple imports can exist on one line
+  --max-line-length MAX_LINE_LENGTH
+                        The maximal number of characters per line of from-
+                        imports when using --multi-imports.
+  -k, --keep-unused     keep unused imports even though detected as unused
+  --heuristic-unused HEURISTIC_UNUSED
+                        Remove unused imports only if number of imports is
+                        less than <HEURISTIC_UNUSED> percent of the total
+                        lines of code
+  --statsonly           don't write or display anything except the file stats
+  -e, --expand-stars    Expand star imports into the names in the actual
+                        module, which can then have unused names removed.
+                        Requires modules can be imported
+  --diff                don't modify files, just dump out diffs
+  --stdout              dump file output to stdout
+
+
 
 Typically, configuration will be in ``setup.cfg`` for flake8 (support for
 tox.ini, pyproject.toml is TODO)::
 
     [flake8]
+    max-line-length=120
     enable-extensions = G
     ignore =
         A003,

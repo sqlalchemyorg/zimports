@@ -2,7 +2,7 @@ import contextlib
 import io
 import unittest
 
-import mock
+from unittest import mock
 import zimports
 
 
@@ -94,6 +94,10 @@ class ImportsTest(unittest.TestCase):
 
     def test_multiple_imports(self):
         self._assert_file("multi_imports.py", opts=("--multi-imports", ))
+
+    def test_multi_imports_long_lines(self):
+        self._assert_file("multi_imports_long_lines.py", opts=(
+            "--multi-imports", "--max-line-length=78", "-k"))
 
 
 sqlalchemy_names = [

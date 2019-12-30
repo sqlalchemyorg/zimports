@@ -9,6 +9,7 @@ import importlib
 import os
 import re
 import sys
+import textwrap
 import time
 
 import flake8_import_order as f8io
@@ -101,7 +102,8 @@ def _rewrite_source(options, filename, source_lines):
         nosort_imports,
         import_gap_lines,
         imports_start_on,
-        style
+        style,
+        max_line_length=options.max_line_length
     )
 
     differ = list(difflib.Differ().compare(source_lines, rewritten))
@@ -168,6 +170,7 @@ def _write_source(
     import_gap_lines,
     imports_start_on,
     style,
+    max_line_length=10000,
 ):
     buf = []
     previous_import = None
@@ -182,20 +185,20 @@ def _write_source(
                 ):
                     buf.append("")
                 previous_import = import_node
-                buf.append(_write_import(import_node))
+                buf.extend(_write_import(import_node, max_line_length=max_line_length))
 
             for import_node in nosort_imports:
                 if previous_import is not None:
                     buf.append("")
                     previous_import = None
-                buf.append(_write_import(import_node))
+                buf.extend(_write_import(import_node, max_line_length=max_line_length))
 
         if lineno not in import_gap_lines:
             buf.append(line.rstrip())
     return buf
 
 
-def _write_import(import_node):
+def _write_import(import_node, max_line_length=200):
     names = import_node.render_ast_names
     modules = []
     for name in names:
@@ -206,19 +209,32 @@ def _write_import(import_node):
     modules.sort(key=lambda x: x.lower())
     modules = ", ".join(modules)
     if not import_node.is_from:
-        return "import %s%s%s" % (
+        return ["import %s%s%s" % (
             modules,
             "  # noqa" if import_node.noqa else "",
             " nosort" if import_node.nosort else "",
-        )
+        )]
     else:
-        return "from %s%s import %s%s%s" % (
+        line = "from %s%s import %s%s%s" % (
             "." * import_node.level,
             import_node.modules[0] or "",
             modules,
             "  # noqa" if import_node.noqa else "",
             " nosort" if import_node.nosort else "",
         )
+        if len(line) > max_line_length:
+            lines = ["from %s%s import (%s%s" % (
+                "." * import_node.level,
+                import_node.modules[0] or "",
+                "  # noqa" if import_node.noqa else "",
+                " nosort" if import_node.nosort else "",
+            )]
+            indent = "    "
+            lines.extend(textwrap.wrap(
+                modules + ")", max_line_length, initial_indent=indent, subsequent_indent=indent, break_long_words=False))
+            return lines
+        else:
+            return [line]
 
 
 class ClassifiedImport(
@@ -514,8 +530,8 @@ def _as_single_imports(import_nodes, stats, expand_stars=False):
                             import_node.lineno,
                             import_node.level,
                             import_node.package,
-                            [ast_cls(star_name, asname=None)],
-                            [ast_cls(star_name, asname=None)],
+                            [ast_cls(star_name, None)],
+                            [ast_cls(star_name, None)],
                             import_node.noqa,
                             import_node.nosort,
                         )
@@ -648,6 +664,13 @@ def main(argv=None):
         "--multi-imports",
         action="store_true",
         help="If set, multiple imports can exist on one line"
+    )
+    parser.add_argument(
+        "--max-line-length",
+        type=int,
+        default=config["flake8"].get("max-line-length", 200),
+        help="The maximal number of characters per line of from-imports when "
+        "using --multi-imports."
     )
     parser.add_argument(
         "-k",
