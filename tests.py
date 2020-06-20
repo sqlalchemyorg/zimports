@@ -37,7 +37,7 @@ class ImportsTest(unittest.TestCase):
 
         if checkfile is None:
             checkfile = filename.replace(".py", ".expected.py")
-        with open("test_files/%s" % checkfile) as file_:
+        with open("test_files/%s" % checkfile, encoding="utf8") as file_:
             self.assertEqual(file_.read(), buf.getvalue())
 
     def setUp(self):
@@ -94,6 +94,9 @@ class ImportsTest(unittest.TestCase):
 
     def test_multiple_imports(self):
         self._assert_file("multi_imports.py", opts=("--multi-imports", ))
+
+    def test_unicode_characters(self):
+        self._assert_file("unicode_characters.py")
 
 
 sqlalchemy_names = [

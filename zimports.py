@@ -557,7 +557,7 @@ def _lines_with_newlines(lines):
 
 
 def _run_file(options, filename):
-    with open(filename) as file_:
+    with open(filename, encoding="utf8") as file_:
         source_lines = [line.rstrip() for line in file_]
     if options.keep_unused:
         if options.heuristic_unused:
