@@ -2,6 +2,8 @@ from __future__ import print_function
 
 import argparse
 import ast
+from ast import parse
+import codecs
 import collections
 import configparser
 import difflib
@@ -558,10 +560,6 @@ def _read_python_source(filename):
         if text[-1] == "\n":
             text = text[0:-1]
         return text.split("\n"), encoding_comment
-
-
-import codecs
-from ast import parse
 
 # Regexp to match python magic encoding line
 _PYTHON_MAGIC_COMMENT_re = re.compile(
