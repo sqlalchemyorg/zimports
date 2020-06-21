@@ -28,6 +28,7 @@ class ImportsTest(unittest.TestCase):
 
     def _assert_file(
         self, filename, opts=("--expand-star", "-m", "sqlalchemy"),
+        encoding="utf-8",
         checkfile=None
     ):
 
@@ -37,7 +38,7 @@ class ImportsTest(unittest.TestCase):
 
         if checkfile is None:
             checkfile = filename.replace(".py", ".expected.py")
-        with open("test_files/%s" % checkfile, encoding="utf8") as file_:
+        with open("test_files/%s" % checkfile, encoding=encoding) as file_:
             self.assertEqual(file_.read(), buf.getvalue())
 
     def setUp(self):
@@ -97,6 +98,9 @@ class ImportsTest(unittest.TestCase):
 
     def test_unicode_characters(self):
         self._assert_file("unicode_characters.py")
+
+    def test_magic_encoding_comment(self):
+        self._assert_file("cp1252.py", encoding="cp1252")
 
 
 sqlalchemy_names = [

@@ -62,9 +62,7 @@ def _rewrite_source(options, filename, source_lines):
         )
 
     on_source_lines = _write_source(
-        source_lines, imports, [],
-        import_gap_lines, imports_start_on,
-        style
+        source_lines, imports, [], import_gap_lines, imports_start_on, style
     )
     # now parse again.  Because pyflakes won't tell us about unused
     # imports that are not the first import, we had to flatten first.
@@ -101,7 +99,7 @@ def _rewrite_source(options, filename, source_lines):
         nosort_imports,
         import_gap_lines,
         imports_start_on,
-        style
+        style,
     )
 
     differ = list(difflib.Differ().compare(source_lines, rewritten))
@@ -174,11 +172,8 @@ def _write_source(
     for lineno, line in enumerate(source_lines, 1):
         if lineno == imports_start_on:
             for import_node in imports:
-                if (
-                    previous_import is not None
-                    and not style.same_section(
-                        previous_import, import_node
-                    )
+                if previous_import is not None and not style.same_section(
+                    previous_import, import_node
                 ):
                     buf.append("")
                 previous_import = import_node
@@ -556,9 +551,79 @@ def _lines_with_newlines(lines):
         yield line + "\n"
 
 
+def _read_python_source(filename):
+    with open(filename, "rb") as file_:
+        encoding_comment = _parse_magic_encoding_comment(file_)
+        text = importlib.util.decode_source(file_.read())
+        if text[-1] == "\n":
+            text = text[0:-1]
+        return text.split("\n"), encoding_comment
+
+
+import codecs
+from ast import parse
+
+# Regexp to match python magic encoding line
+_PYTHON_MAGIC_COMMENT_re = re.compile(
+    r"[ \t\f]* \# .* coding[=:][ \t]*([-\w.]+)", re.VERBOSE
+)
+
+
+def _parse_magic_encoding_comment(fp):
+    """Deduce the encoding of a Python source file (binary mode) from magic
+    comment.
+
+    It does this in the same way as the `Python interpreter`__
+
+    .. __: http://docs.python.org/ref/encodings.html
+
+    The ``fp`` argument should be a seekable file object in binary mode.
+
+    """
+    pos = fp.tell()
+    fp.seek(0)
+    try:
+        line1 = fp.readline()
+        has_bom = line1.startswith(codecs.BOM_UTF8)
+        if has_bom:
+            line1 = line1[len(codecs.BOM_UTF8) :]
+
+        m = _PYTHON_MAGIC_COMMENT_re.match(line1.decode("ascii", "ignore"))
+        if not m:
+            try:
+                parse(line1.decode("ascii", "ignore"))
+            except (ImportError, SyntaxError):
+                # Either it's a real syntax error, in which case the source
+                # is not valid python source, or line2 is a continuation of
+                # line1, in which case we don't want to scan line2 for a magic
+                # comment.
+                pass
+            else:
+                line2 = fp.readline()
+                m = _PYTHON_MAGIC_COMMENT_re.match(
+                    line2.decode("ascii", "ignore")
+                )
+
+        if has_bom:
+            if m:
+                raise SyntaxError(
+                    "python refuses to compile code with both a UTF8"
+                    " byte-order-mark and a magic encoding comment"
+                )
+            return "utf_8"
+        elif m:
+            return m.group(1)
+        else:
+            return None
+    finally:
+        fp.seek(pos)
+
+
 def _run_file(options, filename):
-    with open(filename, encoding="utf8") as file_:
-        source_lines = [line.rstrip() for line in file_]
+
+    lines, encoding_comment = _read_python_source(filename)
+    source_lines = [line.rstrip() for line in lines]
+
     if options.keep_unused:
         if options.heuristic_unused:
             raise Exception(
@@ -604,7 +669,11 @@ def _run_file(options, filename):
             )
         else:
             if stats["is_changed"]:
-                with open(filename, "w") as file_:
+                with open(
+                    filename,
+                    "w",
+                    encoding=encoding_comment if encoding_comment else "utf-8",
+                ) as file_:
                     file_.writelines(_lines_with_newlines(result))
 
 
@@ -647,7 +716,7 @@ def main(argv=None):
     parser.add_argument(
         "--multi-imports",
         action="store_true",
-        help="If set, multiple imports can exist on one line"
+        help="If set, multiple imports can exist on one line",
     )
     parser.add_argument(
         "-k",
@@ -683,7 +752,8 @@ def main(argv=None):
         "--stdout", action="store_true", help="dump file output to stdout"
     )
     parser.add_argument(
-         "filename", nargs="+", help="Python filename(s) or directories")
+        "filename", nargs="+", help="Python filename(s) or directories"
+    )
 
     options = parser.parse_args(argv)
 
