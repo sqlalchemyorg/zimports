@@ -75,6 +75,9 @@ class ImportsTest(unittest.TestCase):
     def test_very_long_import(self):
         self._assert_file("very_long_import.py")
 
+    def test_empty_file(self):
+        self._assert_file("empty.py")
+
     def test_conditional_imports(self):
         self._assert_file("conditional_imports.py")
 

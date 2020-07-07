@@ -549,16 +549,15 @@ def sort_imports(style, imports, options):
 
 
 def _lines_with_newlines(lines):
-    for line in lines:
+    for line in lines[0:-1]:
         yield line + "\n"
+    yield lines[-1]
 
 
 def _read_python_source(filename):
     with open(filename, "rb") as file_:
         encoding_comment = _parse_magic_encoding_comment(file_)
         text = importlib.util.decode_source(file_.read())
-        if text[-1] == "\n":
-            text = text[0:-1]
         return text.split("\n"), encoding_comment
 
 # Regexp to match python magic encoding line
