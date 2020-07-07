@@ -8,6 +8,7 @@ import collections
 import configparser
 import difflib
 import importlib
+import io
 import os
 import re
 import sys
@@ -556,9 +557,13 @@ def _lines_with_newlines(lines):
 
 def _read_python_source(filename):
     with open(filename, "rb") as file_:
+        # ensure the filehandle is seekable, which is not the
+        # case if a stdin stream was sent, see #17
+        file_ = io.BytesIO(file_.read())
         encoding_comment = _parse_magic_encoding_comment(file_)
         text = importlib.util.decode_source(file_.read())
         return text.split("\n"), encoding_comment
+
 
 # Regexp to match python magic encoding line
 _PYTHON_MAGIC_COMMENT_re = re.compile(
