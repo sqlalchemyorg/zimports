@@ -556,10 +556,15 @@ def _lines_with_newlines(lines):
 
 
 def _read_python_source(filename):
-    with open(filename, "rb") as file_:
-        # ensure the filehandle is seekable, which is not the
-        # case if a stdin stream was sent, see #17
-        file_ = io.BytesIO(file_.read())
+    if filename == "-":
+        file_content = sys.stdin.buffer.read()
+    else:
+        with open(filename, "rb") as file_:
+            file_content = file_.read()
+
+    # ensure the filehandle is seekable, which is not the
+    # case if a stdin stream was sent, see #17
+    with io.BytesIO(file_content) as file_:
         encoding_comment = _parse_magic_encoding_comment(file_)
         text = importlib.util.decode_source(file_.read())
         return text.split("\n"), encoding_comment
@@ -658,9 +663,7 @@ def _run_file(options, filename):
         )
 
     if not options.statsonly:
-        if options.stdout:
-            sys.stdout.writelines(_lines_with_newlines(result))
-        elif options.diff:
+        if options.diff:
             sys.stdout.writelines(
                 difflib.unified_diff(
                     list(_lines_with_newlines(source_lines)),
@@ -669,6 +672,8 @@ def _run_file(options, filename):
                     tofile=filename,
                 )
             )
+        elif options.stdout or filename == "-":
+            sys.stdout.writelines(_lines_with_newlines(result))
         else:
             if stats["is_changed"]:
                 with open(
