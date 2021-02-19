@@ -768,7 +768,7 @@ def main(argv=None):
         if os.path.isdir(filename):
             for root, dirs, files in os.walk(filename):
                 for file in files:
-                    if file.endswith(".py"):
+                    if file.endswith(".py") or file.endswith(".pyi"):
                         _run_file(options, os.path.join(root, file))
 
         else:
