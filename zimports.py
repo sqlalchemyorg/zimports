@@ -14,6 +14,9 @@ import re
 import sys
 import time
 
+from flake8.main.application import Application
+from flake8.style_guide import Decision
+from flake8.utils import normalize_path
 import flake8_import_order as f8io
 from flake8_import_order.styles import lookup_entry_point
 import pyflakes.checker
@@ -353,7 +356,7 @@ def _parse_toplevel_imports(
     warnings = pyflakes.checker.Checker(tree, filename)
 
     if drill_for_warnings:
-        warnings_set = _drill_for_warnings(filename, source_lines, warnings)
+        warnings_set = _drill_for_warnings(options, filename, source_lines, warnings)
     else:
         warnings_set = None
 
@@ -367,11 +370,17 @@ def _parse_toplevel_imports(
     return imports, warnings_set, lines_with_code
 
 
-def _drill_for_warnings(filename, source_lines, warnings):
+def _drill_for_warnings(options, filename, source_lines, warnings):
     # pyflakes doesn't warn for all occurrences of an unused import
     # if that same symbol is repeated, so run over and over again
     # until we find every possible warning.  assumes single-line
     # imports
+
+    if options.flake8_app:
+        abs_filename = normalize_path(filename)
+        style_guide = options.flake8_app.guide.style_guide_for(abs_filename)
+    else:
+        style_guide = None
 
     source_lines = list(source_lines)
     warnings_set = set()
@@ -382,6 +391,12 @@ def _drill_for_warnings(filename, source_lines, warnings):
             if (
                 not isinstance(warning, pyflakes.messages.UnusedImport)
                 or warning.lineno in seen_lineno
+            ):
+                continue
+
+            if (
+                style_guide
+                and style_guide.should_report_error("F401") == Decision.Ignored
             ):
                 continue
 
@@ -763,6 +778,13 @@ def main(argv=None):
     )
 
     options = parser.parse_args(argv)
+
+    if 'per-file-ignores' in config["flake8"]:
+        flake8_app = Application()
+        flake8_app.initialize([])
+        options.flake8_app = flake8_app
+    else:
+        options.flake8_app = None
 
     for filename in options.filename:
         if os.path.isdir(filename):

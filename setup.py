@@ -20,7 +20,11 @@ setup(
     license='BSD',
     py_modules=('zimports', 'tests'),
     zip_safe=False,
-    install_requires=['pyflakes', 'flake8-import-order'],
+    install_requires=[
+        'pyflakes',
+        'flake8-import-order',
+        'flake8>=3.7.0'
+    ],
     tests_require=['mock'],
     entry_points={
         'console_scripts': ['zimports = zimports:main'],
