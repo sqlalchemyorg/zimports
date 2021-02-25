@@ -1,5 +1,7 @@
 import contextlib
 import io
+import os
+import tempfile
 import unittest
 
 import mock
@@ -27,6 +29,20 @@ class ImportsTest(unittest.TestCase):
             "zimports.zimports.importlib.import_module", import_module
         ):
             yield
+
+    @contextlib.contextmanager
+    def _mock_config(self, config_text):
+        from zimports.cli import _load_config
+
+        with tempfile.NamedTemporaryFile("w+", delete=False) as file:
+            file.write(config_text)
+
+        def load_config(name=None):
+            return _load_config(file.name)
+
+        with mock.patch("zimports.cli._load_config", load_config):
+            yield
+        os.unlink(file.name)
 
     def _assert_file(
         self,
@@ -109,6 +125,43 @@ class ImportsTest(unittest.TestCase):
 
     def test_magic_encoding_comment(self):
         self._assert_file("cp1252.py", encoding="cp1252")
+
+    def test_per_file_ignore(self):
+        with self._mock_config(
+            """
+[flake8]
+per-file-ignores =
+                 **/*.py:F401
+                 lib/sqlalchemy/events.py:F401
+        """
+        ):
+            self._assert_file("tricky_parens.py")
+
+    def test_per_file_ignore_file_not_selected(self):
+        with self._mock_config(
+            """
+[flake8]
+per-file-ignores =
+                 **/__init__.py:F401
+                 lib/sqlalchemy/events.py:F401
+        """
+        ):
+            self._assert_file(
+                "tricky_parens.py", checkfile="tricky_parens.no_unused.py"
+            )
+
+    def test_per_file_ignore_other_codes(self):
+        with self._mock_config(
+            """
+[flake8]
+per-file-ignores =
+                 **/*.py:E203,E305,E711,E712,E721,E722,E741
+                 lib/sqlalchemy/events.py:F401
+        """
+        ):
+            self._assert_file(
+                "tricky_parens.py", checkfile="tricky_parens.no_unused.py"
+            )
 
 
 sqlalchemy_names = [

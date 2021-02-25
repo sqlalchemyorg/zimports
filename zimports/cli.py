@@ -5,16 +5,21 @@ from .ventored import parse_files_to_codes_mapping
 from .zimports import run_with_options
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(prog="zimports")
-
+def _load_config(config_file="setup.cfg"):
     config = configparser.ConfigParser()
     config["flake8"] = {
         "application-import-names": "",
         "application-package-names": "",
         "import-order-style": "google",
     }
-    config.read("setup.cfg")
+    config.read(config_file)
+    return config
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="zimports")
+
+    config = _load_config()
 
     parser.add_argument(
         "-m",
