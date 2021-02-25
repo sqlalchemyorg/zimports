@@ -10,7 +10,7 @@ class ImportsTest(unittest.TestCase):
     @contextlib.contextmanager
     def _capture_stdout(self):
         buf = io.StringIO()
-        with mock.patch("zimports.sys", mock.Mock(stdout=buf)):
+        with mock.patch("zimports.zimports.sys", mock.Mock(stdout=buf)):
             yield buf
 
     @contextlib.contextmanager
@@ -23,18 +23,23 @@ class ImportsTest(unittest.TestCase):
             else:
                 raise ImportError(name)
 
-        with mock.patch("zimports.importlib.import_module", import_module):
+        with mock.patch(
+            "zimports.zimports.importlib.import_module", import_module
+        ):
             yield
 
     def _assert_file(
-        self, filename, opts=("--expand-star", "-m", "sqlalchemy"),
+        self,
+        filename,
+        opts=("--expand-star", "-m", "sqlalchemy"),
         encoding="utf-8",
-        checkfile=None
+        checkfile=None,
     ):
 
         with self._simulate_importlib(), self._capture_stdout() as buf:
             zimports.main(
-                ["test_files/%s" % filename] + ["--stdout"] + list(opts))
+                ["test_files/%s" % filename] + ["--stdout"] + list(opts)
+            )
 
         if checkfile is None:
             checkfile = filename.replace(".py", ".expected.py")
@@ -57,7 +62,7 @@ class ImportsTest(unittest.TestCase):
         self._assert_file(
             "star_imports.py",
             ["--style", "cryptography", "--expand-star", "-m", "sqlalchemy"],
-            checkfile="star_imports.cryptography.expected.py"
+            checkfile="star_imports.cryptography.expected.py",
         )
 
     def test_star_imports_two(self):
@@ -97,7 +102,7 @@ class ImportsTest(unittest.TestCase):
         self._assert_file("whitespace3.py")
 
     def test_multiple_imports(self):
-        self._assert_file("multi_imports.py", opts=("--multi-imports", ))
+        self._assert_file("multi_imports.py", opts=("--multi-imports",))
 
     def test_unicode_characters(self):
         self._assert_file("unicode_characters.py")
