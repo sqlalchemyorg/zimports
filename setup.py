@@ -19,7 +19,7 @@ setup(
     author_email="mike_mp@zzzcomputing.com",
     url="https://github.com/sqlalchemyorg/zimports",
     license="MIT",
-    packages=find_packages(include=["zimports"]),
+    packages=find_packages(include=["zimports*"]),
     zip_safe=False,
     install_requires=["pyflakes", "flake8-import-order"],
     tests_require=["mock"],

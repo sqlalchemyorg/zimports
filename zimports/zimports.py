@@ -17,8 +17,8 @@ from flake8_import_order.styles import lookup_entry_point
 import pyflakes.checker
 import pyflakes.messages
 
-from .ventored import matches_filename
-from .ventored import normalize_path
+from .vendored.flake8 import matches_filename
+from .vendored.flake8 import normalize_path
 
 
 def _rewrite_source(options, filename, source_lines):

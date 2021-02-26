@@ -1,7 +1,7 @@
 import argparse
 import configparser
 
-from .ventored import parse_files_to_codes_mapping
+from .vendored.flake8 import parse_files_to_codes_mapping
 from .zimports import run_with_options
 
 
