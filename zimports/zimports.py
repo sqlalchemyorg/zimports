@@ -1,11 +1,9 @@
 from __future__ import print_function
 
-import argparse
 import ast
 from ast import parse
 import codecs
 import collections
-import configparser
 import difflib
 import importlib
 import io
@@ -18,6 +16,9 @@ import flake8_import_order as f8io
 from flake8_import_order.styles import lookup_entry_point
 import pyflakes.checker
 import pyflakes.messages
+
+from .vendored.flake8 import matches_filename
+from .vendored.flake8 import normalize_path
 
 
 def _rewrite_source(options, filename, source_lines):
@@ -353,7 +354,9 @@ def _parse_toplevel_imports(
     warnings = pyflakes.checker.Checker(tree, filename)
 
     if drill_for_warnings:
-        warnings_set = _drill_for_warnings(filename, source_lines, warnings)
+        warnings_set = _drill_for_warnings(
+            options, filename, source_lines, warnings
+        )
     else:
         warnings_set = None
 
@@ -367,11 +370,18 @@ def _parse_toplevel_imports(
     return imports, warnings_set, lines_with_code
 
 
-def _drill_for_warnings(filename, source_lines, warnings):
+def _drill_for_warnings(options, filename, source_lines, warnings):
     # pyflakes doesn't warn for all occurrences of an unused import
     # if that same symbol is repeated, so run over and over again
     # until we find every possible warning.  assumes single-line
     # imports
+
+    ignore_errors = set()
+    if options.per_file_ignores:
+        abs_filename = normalize_path(filename)
+        for pattern, codes in options.per_file_ignores:
+            if matches_filename(abs_filename, [normalize_path(pattern)]):
+                ignore_errors.update(codes)
 
     source_lines = list(source_lines)
     warnings_set = set()
@@ -383,6 +393,9 @@ def _drill_for_warnings(filename, source_lines, warnings):
                 not isinstance(warning, pyflakes.messages.UnusedImport)
                 or warning.lineno in seen_lineno
             ):
+                continue
+
+            if "F401" in ignore_errors:
                 continue
 
             # we only deal with "top level" imports for now. imports
@@ -684,86 +697,7 @@ def _run_file(options, filename):
                     file_.writelines(_lines_with_newlines(result))
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser()
-
-    config = configparser.ConfigParser()
-    config["flake8"] = {
-        "application-import-names": "",
-        "application-package-names": "",
-        "import-order-style": "google",
-    }
-    config.read("setup.cfg")
-
-    parser.add_argument(
-        "-m",
-        "--application-import-names",
-        type=str,
-        default=config["flake8"]["application-import-names"],
-        help="comma separated list of names that should be considered local "
-        "to the application.  reads from [flake8] application-import-names "
-        "by default.",
-    )
-    parser.add_argument(
-        "-p",
-        "--application-package-names",
-        type=str,
-        default=config["flake8"]["application-package-names"],
-        help="comma separated list of names that should be considered local "
-        "to the organization.  reads from [flake8] application-package-names "
-        "by default.",
-    )
-    parser.add_argument(
-        "--style",
-        type=str,
-        default=config["flake8"]["import-order-style"],
-        help="import order styling, reads from "
-        "[flake8] import-order-style by default, or defaults to 'google'",
-    )
-    parser.add_argument(
-        "--multi-imports",
-        action="store_true",
-        help="If set, multiple imports can exist on one line",
-    )
-    parser.add_argument(
-        "-k",
-        "--keep-unused",
-        action="store_true",
-        help="keep unused imports even though detected as unused",
-    )
-    parser.add_argument(
-        "--heuristic-unused",
-        type=int,
-        help="Remove unused imports only if number of imports is "
-        "less than <HEURISTIC_UNUSED> percent of the total lines of code",
-    )
-    parser.add_argument(
-        "--statsonly",
-        action="store_true",
-        help="don't write or display anything except the file stats",
-    )
-    parser.add_argument(
-        "-e",
-        "--expand-stars",
-        action="store_true",
-        help="Expand star imports into the names in the actual module, which "
-        "can then have unused names removed.  Requires modules can be "
-        "imported",
-    )
-    parser.add_argument(
-        "--diff",
-        action="store_true",
-        help="don't modify files, just dump out diffs",
-    )
-    parser.add_argument(
-        "--stdout", action="store_true", help="dump file output to stdout"
-    )
-    parser.add_argument(
-        "filename", nargs="+", help="Python filename(s) or directories"
-    )
-
-    options = parser.parse_args(argv)
-
+def run_with_options(options):
     for filename in options.filename:
         if os.path.isdir(filename):
             for root, dirs, files in os.walk(filename):
@@ -773,7 +707,3 @@ def main(argv=None):
 
         else:
             _run_file(options, filename)
-
-
-if __name__ == "__main__":
-    main()
