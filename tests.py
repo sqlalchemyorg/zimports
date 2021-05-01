@@ -3,8 +3,8 @@ import io
 import os
 import tempfile
 import unittest
+from unittest import mock
 
-import mock
 import zimports
 
 
