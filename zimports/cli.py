@@ -55,13 +55,23 @@ def main(argv=None):
         "-k",
         "--keep-unused",
         action="store_true",
-        help="keep unused imports even though detected as unused",
+        help="keep unused imports even though detected as unused. "
+        "Implies keep-unused-type-checking",
+    )
+    parser.add_argument(
+        "-kt",
+        "--keep-unused-type-checking",
+        action="store_true",
+        help="keep unused imports even though detected as unused "
+        "in type checking blocks. zimports does not detect type usage "
+        "in comments or when used as string",
     )
     parser.add_argument(
         "--heuristic-unused",
         type=int,
         help="Remove unused imports only if number of imports is "
-        "less than <HEURISTIC_UNUSED> percent of the total lines of code",
+        "less than <HEURISTIC_UNUSED> percent of the total lines of code. "
+        "Ignored in type checking blocks",
     )
     parser.add_argument(
         "--statsonly",

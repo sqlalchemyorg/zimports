@@ -68,7 +68,7 @@ class ImportsTest(unittest.TestCase):
         )
         self.mock_sqlalchemy_orm = mock.MagicMock(
             __all__=sqlalchemy_orm_names,
-            **{name: mock.Mock() for name in sqlalchemy_orm_names}
+            **{name: mock.Mock() for name in sqlalchemy_orm_names},
         )
 
     def test_star_imports_one(self):
@@ -162,6 +162,27 @@ per-file-ignores =
             self._assert_file(
                 "tricky_parens.py", checkfile="tricky_parens.no_unused.py"
             )
+
+    def test_type_checking1(self):
+        self._assert_file("type_checking1.py")
+
+    def test_type_checking2(self):
+        self._assert_file("type_checking2.py", opts=["-k"])
+
+    def test_type_checking3(self):
+        self._assert_file("type_checking3.py", opts=["-k"])
+
+    def test_type_checking3_unused(self):
+        self._assert_file(
+            "type_checking3.py", checkfile="type_checking3.no_unused.py"
+        )
+
+    def test_type_checking3_unused_types(self):
+        self._assert_file(
+            "type_checking3.py",
+            opts=["-kt"],
+            checkfile="type_checking3.no_unused_types.py",
+        )
 
 
 sqlalchemy_names = [
