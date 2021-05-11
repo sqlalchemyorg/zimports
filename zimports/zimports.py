@@ -1,9 +1,7 @@
-from __future__ import print_function
-
 import ast
 from ast import parse
 import codecs
-import collections
+import dataclasses as dc
 import difflib
 import importlib
 import io
@@ -11,6 +9,13 @@ import os
 import re
 import sys
 import time
+from typing import Any
+from typing import Iterable
+from typing import List
+from typing import NamedTuple
+from typing import Optional
+from typing import Set
+from typing import Tuple
 
 import flake8_import_order as f8io
 from flake8_import_order.styles import lookup_entry_point
@@ -21,106 +26,134 @@ from .vendored.flake8 import matches_filename
 from .vendored.flake8 import normalize_path
 
 
-def _rewrite_source(options, filename, source_lines):
+@dc.dataclass
+class Rewriter:
+    options: Any
+    filename: str
+    source_lines: List[str]
 
-    keep_threshhold = options.heuristic_unused
-    expand_stars = options.expand_stars
-    style_entry_point = lookup_entry_point(options.style)
-    style = style_entry_point.load()
+    def __post_init__(self):
+        self.keep_threshhold: bool = self.options.heuristic_unused
+        self.expand_stars: bool = self.options.expand_stars
+        style_entry_point = lookup_entry_point(self.options.style)
+        self.style = style_entry_point.load()
+        self.original_source_lines = self.source_lines
 
-    stats = {
-        "starttime": time.time(),
-        "names_from_star": 0,
-        "star_imports_removed": 0,
-        "removed_imports": 0,
-    }
+        self.stats = {
+            "starttime": time.time(),
+            "names_from_star": 0,
+            "star_imports_removed": 0,
+            "removed_imports": 0,
+        }
 
-    # parse the code.  get the imports and a collection of line numbers
-    # we definitely don't want to discard
-    imports, _, lines_with_code = _parse_toplevel_imports(
-        options, filename, source_lines
-    )
-
-    original_imports = len(imports)
-    if imports:
-        imports_start_on = imports[0].lineno
-    else:
-        imports_start_on = 0
-
-    # assemble a set of line numbers that will not be copied to the
-    # output.  E.g. lines where import statements occurred, or the
-    # extra lines they take up which we figure out by looking at the
-    # "gap" between statements
-    import_gap_lines = _get_import_discard_lines(
-        filename, source_lines, imports, lines_with_code
-    )
-
-    # flatten imports into single import per line and rewrite
-    # full source
-    if not options.multi_imports:
-        imports = list(
-            _dedupe_single_imports(
-                _as_single_imports(imports, stats, expand_stars=expand_stars),
-                stats,
-            )
+    def rewrite(self):
+        # parse the code.  get the imports and a collection of line numbers
+        # we definitely don't want to discard
+        imports, _, lines_with_code = _parse_toplevel_imports(
+            self.options, self.filename, self.source_lines
         )
 
-    on_source_lines = _write_source(
-        source_lines, imports, [], import_gap_lines, imports_start_on, style
-    )
-    # now parse again.  Because pyflakes won't tell us about unused
-    # imports that are not the first import, we had to flatten first.
-    imports, warnings, lines_with_code = _parse_toplevel_imports(
-        options, filename, on_source_lines, drill_for_warnings=True
-    )
+        original_imports = len(imports)
+        if imports:
+            imports_start_on = imports[0].lineno
+        else:
+            imports_start_on = 0
 
-    # now remove unused names from the imports
-    # if number of imports is greater than keep_threshold% of the total
-    # lines of code, don't remove names, assume this is like a
-    # package file
-    if not lines_with_code:
-        stats["import_proportion"] = import_proportion = 0
-    else:
-        stats["import_proportion"] = import_proportion = (
-            (
-                len(imports)
-                + stats["star_imports_removed"]
-                - stats["names_from_star"]
+        # assemble a set of line numbers that will not be copied to the
+        # output.  E.g. lines where import statements occurred, or the
+        # extra lines they take up which we figure out by looking at the
+        # "gap" between statements
+        import_gap_lines: Set[int] = _get_import_discard_lines(
+            self.source_lines, imports, lines_with_code
+        )
+
+        # flatten imports into single import per line and rewrite
+        # full source
+        if not self.options.multi_imports:
+            imports = list(
+                _dedupe_single_imports(
+                    _as_single_imports(
+                        imports, self.stats, expand_stars=self.expand_stars
+                    ),
+                    self.stats,
+                )
             )
-            / float(len(lines_with_code))
-        ) * 100
 
-    if keep_threshhold is None or import_proportion < keep_threshhold:
-        _remove_unused_names(imports, warnings, stats)
+        on_source_lines = _write_source(
+            self.source_lines,
+            imports,
+            [],
+            import_gap_lines,
+            imports_start_on,
+            self.style,
+        )
+        # now parse again.  Because pyflakes won't tell us about unused
+        # imports that are not the first import, we had to flatten first.
+        imports, warnings, lines_with_code = _parse_toplevel_imports(
+            self.options,
+            self.filename,
+            on_source_lines,
+            drill_for_warnings=True,
+        )
 
-    stats["import_line_delta"] = len(imports) - original_imports
+        # now remove unused names from the imports
+        # if number of imports is greater than keep_threshold% of the total
+        # lines of code, don't remove names, assume this is like a
+        # package file
+        if not lines_with_code:
+            self.stats["import_proportion"] = import_proportion = 0
+        else:
+            self.stats["import_proportion"] = import_proportion = (
+                (
+                    len(imports)
+                    + self.stats["star_imports_removed"]
+                    - self.stats["names_from_star"]
+                )
+                / float(len(lines_with_code))
+            ) * 100
 
-    sorted_imports, nosort_imports = sort_imports(style, imports, options)
+        if (
+            self.keep_threshhold is None
+            or import_proportion < self.keep_threshhold
+        ):
+            _remove_unused_names(imports, warnings, self.stats)
 
-    rewritten = _write_source(
-        source_lines,
-        sorted_imports,
-        nosort_imports,
-        import_gap_lines,
-        imports_start_on,
-        style,
-    )
+        self.stats["import_line_delta"] = len(imports) - original_imports
 
-    differ = list(difflib.Differ().compare(source_lines, rewritten))
+        sorted_imports, nosort_imports = sort_imports(
+            self.style, imports, self.options
+        )
 
-    stats["added"] = len([l for l in differ if l.startswith("+ ")])
-    stats["removed"] = len([l for l in differ if l.startswith("- ")])
-    stats["is_changed"] = bool(stats["added"] or stats["removed"])
-    stats["totaltime"] = time.time() - stats["starttime"]
-    return rewritten, stats
+        rewritten = _write_source(
+            self.source_lines,
+            sorted_imports,
+            nosort_imports,
+            import_gap_lines,
+            imports_start_on,
+            self.style,
+        )
+
+        differ = list(
+            difflib.Differ().compare(self.original_source_lines, rewritten)
+        )
+
+        self.stats["added"] = len([l for l in differ if l.startswith("+ ")])
+        self.stats["removed"] = len([l for l in differ if l.startswith("- ")])
+        self.stats["is_changed"] = bool(
+            self.stats["added"] or self.stats["removed"]
+        )
+        self.stats["totaltime"] = time.time() - self.stats["starttime"]
+        return rewritten, self.stats
 
 
 def _get_import_discard_lines(
-    filename, source_lines, imports, lines_with_code
+    source_lines: List[str],
+    imports: List["ClassifiedImport"],
+    lines_with_code: Set[str],
 ):
     """Get line numbers that are part of imports but not in the AST."""
 
-    import_gap_lines = {node.lineno for node in imports}
+    import_gap_lines: Set[int] = {node.lineno for node in imports}
 
     intermediary_whitespace_lines = []
 
@@ -164,14 +197,14 @@ def _is_whitespace_or_comment(line):
 
 
 def _write_source(
-    source_lines,
-    imports,
+    source_lines: List[str],
+    imports: List["ClassifiedImport"],
     nosort_imports,
-    import_gap_lines,
-    imports_start_on,
-    style,
+    import_gap_lines: Set[int],
+    imports_start_on: int,
+    style: Any,
 ):
-    buf = []
+    buf: List[str] = []
     previous_import = None
     for lineno, line in enumerate(source_lines, 1):
         if lineno == imports_start_on:
@@ -220,24 +253,19 @@ def _write_import(import_node):
         )
 
 
-class ClassifiedImport(
-    collections.namedtuple(
-        "ClassifiedImport",
-        [
-            "type",
-            "is_from",
-            "modules",
-            "names",
-            "lineno",
-            "level",
-            "package",
-            "ast_names",
-            "render_ast_names",
-            "noqa",
-            "nosort",
-        ],
-    )
-):
+class ClassifiedImport(NamedTuple):
+    type: f8io.ImportType
+    is_from: bool
+    modules: list
+    names: list
+    lineno: int
+    level: int
+    package: str
+    ast_names: Optional[str]
+    render_ast_names: list
+    noqa: bool
+    nosort: bool
+
     def __hash__(self):
         return hash((self.type, self.is_from, self.lineno))
 
@@ -276,7 +304,7 @@ class ImportVisitor(f8io.ImportVisitor):
     def __init__(
         self, source_lines, application_import_names, application_package_names
     ):
-        self.imports = []
+        self.imports: List[ClassifiedImport] = []
         self.source_lines = source_lines
         self.application_import_names = frozenset(application_import_names)
         self.application_package_names = frozenset(application_package_names)
@@ -341,7 +369,10 @@ class ImportVisitor(f8io.ImportVisitor):
 
 
 def _parse_toplevel_imports(
-    options, filename, source_lines, drill_for_warnings=False
+    options: Any,
+    filename: str,
+    source_lines: List[str],
+    drill_for_warnings: bool = False,
 ):
     source = "\n".join(source_lines)
 
@@ -370,7 +401,12 @@ def _parse_toplevel_imports(
     return imports, warnings_set, lines_with_code
 
 
-def _drill_for_warnings(options, filename, source_lines, warnings):
+def _drill_for_warnings(
+    options: Any,
+    filename: str,
+    source_lines: List[str],
+    warnings: pyflakes.checker.Checker,
+):
     # pyflakes doesn't warn for all occurrences of an unused import
     # if that same symbol is repeated, so run over and over again
     # until we find every possible warning.  assumes single-line
@@ -384,7 +420,7 @@ def _drill_for_warnings(options, filename, source_lines, warnings):
                 ignore_errors.update(codes)
 
     source_lines = list(source_lines)
-    warnings_set = set()
+    warnings_set: Set[Tuple[str, int]] = set()
     seen_lineno = set()
     while True:
         has_warnings = False
@@ -424,7 +460,11 @@ def _drill_for_warnings(options, filename, source_lines, warnings):
     return warnings_set
 
 
-def _remove_unused_names(imports, warnings, stats):
+def _remove_unused_names(
+    imports: List[ClassifiedImport],
+    warnings: Set[Tuple[str, int]],
+    stats: dict,
+):
     noqa_lines = set(
         import_node.lineno for import_node in imports if import_node.noqa
     )
@@ -455,10 +495,12 @@ def _remove_unused_names(imports, warnings, stats):
     imports[:] = new_imports
 
 
-def _dedupe_single_imports(import_nodes, stats):
+def _dedupe_single_imports(
+    import_nodes: Iterable[ClassifiedImport], stats: dict
+):
 
     seen = {}
-    orig_order = []
+    orig_order: List[Tuple[ClassifiedImport, Any]] = []
 
     for import_node in import_nodes:
         if not import_node.is_from:
@@ -491,7 +533,11 @@ def _dedupe_single_imports(import_nodes, stats):
             stats["removed_imports"] += 1
 
 
-def _as_single_imports(import_nodes, stats, expand_stars=False):
+def _as_single_imports(
+    import_nodes: List[ClassifiedImport],
+    stats: dict,
+    expand_stars: bool = False,
+):
 
     for import_node in import_nodes:
         if not import_node.is_from:
@@ -546,7 +592,7 @@ def _as_single_imports(import_nodes, stats, expand_stars=False):
                     )
 
 
-def sort_imports(style, imports, options):
+def sort_imports(style: Any, imports: List[ClassifiedImport], options: Any):
     tosort = []
     nosort = []
 
@@ -650,7 +696,7 @@ def _run_file(options, filename):
                 "keep-unused and heuristic-unused are mutually exclusive"
             )
         options.heuristic_unused = 0
-    result, stats = _rewrite_source(options, filename, source_lines)
+    result, stats = Rewriter(options, filename, source_lines).rewrite()
     totaltime = stats["totaltime"]
     if not stats["is_changed"]:
         sys.stderr.write(
