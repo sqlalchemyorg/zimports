@@ -33,7 +33,7 @@ class ExecutionError(Exception):
     """Exception raised during execution of Flake8."""
 
 
-string_types = (str, type(u""))
+string_types = (str, type(""))
 _Token = collections.namedtuple("Token", ("tp", "src"))
 _CODE, _FILE, _COLON, _COMMA, _WS = "code", "file", "colon", "comma", "ws"
 _EOF = "eof"
