@@ -47,6 +47,7 @@ class Rewriter:
 
     def _do_rewrite(self, source_lines: List[str], type_check_pass: bool):
         if type_check_pass:
+            # Stats are collected only on the non type check pass.
             stats = self.stats.copy()
             type_checking_blocks = TypeCheckingBlocks(source_lines)
         else:
@@ -108,6 +109,8 @@ class Rewriter:
         )
 
         if type_check_pass:
+            # now remove unused names from the imports if keep unused was not
+            # specified in the arguments
             if self.options.keep_unused_type_checking is False:
                 _remove_unused_names(imports, warnings, stats)
         else:
@@ -152,7 +155,8 @@ class Rewriter:
         return rewritten
 
     def rewrite(self):
-
+        # does two passes: first one handles only the type checking imports;
+        # second one handles the top level imports instead.
         rewritten = self._do_rewrite(self.source_lines, type_check_pass=True)
         rewritten = self._do_rewrite(rewritten, type_check_pass=False)
 
@@ -173,10 +177,13 @@ class TypeCheckingBlocks:
         in_type_checking_block = False
         for lineno, line in enumerate(source_lines, 1):
             if re.match(r"^if [\w+\.]*TYPE_CHECKING:", line):
+                # we are inside an "if TYPE_CHECKING:" block
                 in_type_checking_block = True
                 self.type_checking_blocks.append((lineno, set()))
             elif in_type_checking_block:
                 if line and not re.match(r"^\s+(from|import)", line):
+                    # line is not empty and not an indented import so the
+                    # type checking import block has ended
                     in_type_checking_block = False
                 else:
                     self.type_checking_blocks[-1][1].add(lineno)
@@ -500,7 +507,7 @@ def _drill_for_warnings(
 
             line = source_lines[warning.lineno - 1]
             if top_level:
-                # we only deal with "top level" imports for now. imports
+                # when dealing with "top level" imports, imports
                 # inside of conditionals or in defs aren't counted.
                 if re.match(r"^\s*", line).group(0):
                     continue
