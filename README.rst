@@ -21,7 +21,9 @@ roughly:
 
 * no star imports (e.g. ``from <foo> import *``); these are rewritten as
   explicit names, by importing all the names from each target module and then
-  removing all the unused names.
+  removing all the unused names
+
+* support for TYPE_CHECKING import blocks.
 
 The program currently bolts itself on top of `flake8-import-order
 <https://github.com/PyCQA/flake8-import-order/>`_, in order to reuse the import
@@ -42,7 +44,8 @@ be used for special situations where a few imports have to be in a certain
 order against each other (SQLAlchemy has two lines like this at the moment).
 
 The application also does not affect imports that are inside of conditionals
-or defs, or otherwise indented in any way.  This is also the behavior of
+or defs, or otherwise indented in any way, with the exception of TYPE_CHECKING
+imports.  This is also the behavior of
 flake8-import-order; only imports in column zero of the source file are
 counted, although imports that are on lines below other definitions are
 counted, which are moved up to the top section of the source file.
@@ -84,9 +87,9 @@ The script can run without any configuration, options are as follows::
 
   $ zimports --help
   usage: zimports [-h] [-m APPLICATION_IMPORT_NAMES]
-                  [-p APPLICATION_PACKAGE_NAMES] [--style STYLE] [-k]
-                  [--heuristic-unused HEURISTIC_UNUSED] [--statsonly] [-e]
-                  [--diff] [--stdout]
+                  [-p APPLICATION_PACKAGE_NAMES] [--style STYLE] [--multi-imports]
+                  [-k] [-kt] [--heuristic-unused HEURISTIC_UNUSED] [--statsonly]
+                  [-e] [--diff] [--stdout]
                   filename [filename ...]
 
   positional arguments:
@@ -105,11 +108,16 @@ The script can run without any configuration, options are as follows::
     --style STYLE         import order styling, reads from [flake8] import-
                           order-style by default, or defaults to 'google'
     --multi-imports       If set, multiple imports can exist on one line
-    -k, --keep-unused     keep unused imports even though detected as unused
+    -k, --keep-unused     keep unused imports even though detected as unused.
+                          Implies keep-unused-type-checking
+    -kt, --keep-unused-type-checking
+                          keep unused imports even though detected as unused in
+                          type checking blocks. zimports does not detect type usage
+                          in comments or when used as string
     --heuristic-unused HEURISTIC_UNUSED
                           Remove unused imports only if number of imports is
                           less than <HEURISTIC_UNUSED> percent of the total
-                          lines of code
+                          lines of code. Ignored in type checking blocks
     --statsonly           don't write or display anything except the file stats
     -e, --expand-stars    Expand star imports into the names in the actual
                           module, which can then have unused names removed.
@@ -201,7 +209,7 @@ zimports to be used, such as ``"master"`` or ``"0.1.3"``:
 
     repos:
     -   repo: https://github.com/sqlalchemyorg/zimports/
-        rev: 0.1.3
+        rev: v0.4.0
         hooks:
         -   id: zimports
 
