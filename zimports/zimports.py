@@ -216,7 +216,9 @@ def _get_import_discard_lines(
                     # a codeline is here, so we definitely
                     # are not in an import anymore, go to the next one
                     break
-                elif not _is_whitespace_or_comment(source_lines[gap - 1]):
+                elif not _is_whitespace_or_comment_or_else(
+                    source_lines[gap - 1]
+                ):
                     import_gap_lines.add(gap)
         prev = lineno
 
@@ -238,12 +240,15 @@ def _get_import_discard_lines(
     return import_gap_lines
 
 
-def _is_whitespace_or_comment(line):
+def _is_whitespace_or_comment_or_else(line):
     return bool(
         re.match(r"^\s*$", line)
         or re.match(r"^\s*#", line)
         or re.match(r"^\s*'''", line)
         or re.match(r'^\s*"""', line)
+        # the `else:` is not in lines_with_code since it's not present
+        # in the ast.
+        or re.match(r"^\s*else:", line)
     )
 
 
@@ -446,6 +451,9 @@ def _parse_toplevel_imports(
 
     tree = ast.parse(source, filename)
 
+    # NOTE: the line `else:` does not appear in the ast tree, since it's
+    # considered inside the `if` block. It's ignored by the function
+    # _is_whitespace_or_comment_or_else
     lines_with_code = set(
         node.lineno for node in ast.walk(tree) if hasattr(node, "lineno")
     )

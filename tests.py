@@ -184,6 +184,9 @@ per-file-ignores =
             checkfile="type_checking3.no_unused_types.py",
         )
 
+    def test_delayed_import_typing(self):
+        self._assert_file("delayed_import_typing.py")
+
 
 sqlalchemy_names = [
     "alias",
