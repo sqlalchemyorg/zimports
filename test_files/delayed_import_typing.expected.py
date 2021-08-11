@@ -1,11 +1,11 @@
 import typing
 
 if typing.TYPE_CHECKING:
-    import bmemcached  # noqa
+    import bmemcached
     import memcache
     import pylibmc
     import pymemcache
-else:  # noqa
+else:
     # delayed import
     bmemcached = None
     memcache = None
