@@ -132,6 +132,9 @@ class ImportsTest(unittest.TestCase):
     def test_nosort(self):
         self._assert_file("nosort.py")
 
+    def test_noqa_codes(self):
+        self._assert_file("noqa_codes.py")
+
     def test_per_file_ignore(self):
         with self._mock_config(
             """
