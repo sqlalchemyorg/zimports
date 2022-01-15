@@ -126,6 +126,12 @@ class ImportsTest(unittest.TestCase):
     def test_magic_encoding_comment(self):
         self._assert_file("cp1252.py", encoding="cp1252")
 
+    def test_type_ignore(self):
+        self._assert_file("type_ignore.py")
+
+    def test_nosort(self):
+        self._assert_file("nosort.py")
+
     def test_per_file_ignore(self):
         with self._mock_config(
             """
