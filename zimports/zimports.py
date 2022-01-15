@@ -294,20 +294,18 @@ def _write_import(import_node):
     modules.sort(key=lambda x: x.lower())
     modules = ", ".join(modules)
     if not import_node.is_from:
-        return "%simport %s%s%s" % (
+        return "%simport %s%s" % (
             " " * import_node.col_offset,
             modules,
-            "  # noqa" if import_node.noqa else "",
-            " nosort" if import_node.nosort else "",
+            import_node.noqa_comment if import_node.noqa else "",
         )
     else:
-        return "%sfrom %s%s import %s%s%s" % (
+        return "%sfrom %s%s import %s%s" % (
             " " * import_node.col_offset,
             "." * import_node.level,
             import_node.modules[0] or "",
             modules,
-            "  # noqa" if import_node.noqa else "",
-            " nosort" if import_node.nosort else "",
+            import_node.noqa_comment if import_node.noqa else "",
         )
 
 
@@ -324,6 +322,7 @@ class ClassifiedImport(NamedTuple):
     render_ast_names: list
     noqa: bool
     nosort: bool
+    noqa_comment: Optional[str]
 
     def __hash__(self):
         return hash((self.type, self.is_from, self.lineno))
@@ -376,13 +375,18 @@ class ImportVisitor(f8io.ImportVisitor):
 
     def _get_flags(self, lineno):
         line = self.source_lines[lineno - 1].rstrip()
-        symbols = re.match(r".* # noqa( nosort)?", line)
+        symbols = re.match(
+            r".*?( +(?:# type: ignore +)?# noqa(?: +[A-F]\d\d\d)?( nosort)?.*)",
+            line,
+        )
         noqa = nosort = False
+        noqa_comment = None
         if symbols:
             noqa = True
-            if symbols.group(1):
+            noqa_comment = symbols.group(1)
+            if symbols.group(2):
                 nosort = True
-        return noqa, nosort
+        return noqa, nosort, noqa_comment
 
     def _check_node(self, node):
         return (self.top_level and node.col_offset == 0) or (
@@ -397,7 +401,7 @@ class ImportVisitor(f8io.ImportVisitor):
                 type_ = types_.pop()
             else:
                 type_ = f8io.ImportType.MIXED
-            noqa, nosort = self._get_flags(node.lineno)
+            noqa, nosort, noqa_comment = self._get_flags(node.lineno)
             classified_import = ClassifiedImport(
                 type_,
                 False,
@@ -411,6 +415,7 @@ class ImportVisitor(f8io.ImportVisitor):
                 list(node.names),
                 noqa,
                 nosort,
+                noqa_comment,
             )
             self.imports.append(classified_import)
 
@@ -422,7 +427,7 @@ class ImportVisitor(f8io.ImportVisitor):
             else:
                 type_ = self._classify_type(module)
             names = [alias.name for alias in node.names]
-            noqa, nosort = self._get_flags(node.lineno)
+            noqa, nosort, noqa_comment = self._get_flags(node.lineno)
             classified_import = ClassifiedImport(
                 type_,
                 True,
@@ -436,6 +441,7 @@ class ImportVisitor(f8io.ImportVisitor):
                 list(node.names),
                 noqa,
                 nosort,
+                noqa_comment,
             )
             self.imports.append(classified_import)
 
@@ -455,8 +461,9 @@ def _parse_toplevel_imports(
     # considered inside the `if` block. It's ignored by the function
     # _is_whitespace_or_comment_or_else
     lines_with_code = set(
-        node.lineno for node in ast.walk(tree) if hasattr(node, "lineno")
-        and not isinstance(node, ast.alias)
+        node.lineno
+        for node in ast.walk(tree)
+        if hasattr(node, "lineno") and not isinstance(node, ast.alias)
     )
 
     warnings = pyflakes.checker.Checker(tree, filename)
@@ -639,6 +646,7 @@ def _as_single_imports(
                     [ast_name],
                     import_node.noqa,
                     import_node.nosort,
+                    import_node.noqa_comment
                 )
         else:
             for ast_name in import_node.ast_names:
@@ -661,6 +669,7 @@ def _as_single_imports(
                             [ast_cls(star_name, asname=None)],
                             import_node.noqa,
                             import_node.nosort,
+                            import_node.noqa_comment
                         )
                 else:
                     yield ClassifiedImport(
@@ -676,6 +685,7 @@ def _as_single_imports(
                         [ast_name],
                         import_node.noqa,
                         import_node.nosort,
+                        import_node.noqa_comment
                     )
 
 
