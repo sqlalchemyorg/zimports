@@ -376,7 +376,8 @@ class ImportVisitor(f8io.ImportVisitor):
     def _get_flags(self, lineno):
         line = self.source_lines[lineno - 1].rstrip()
         symbols = re.match(
-            r".*?( +(?:# type: ignore +)?# noqa(?: +[A-F]\d\d\d)?( nosort)?.*)",
+            r".*?( +(?:# type: ignore +)?"
+            r"# noqa\:?(?: +(?:[A-Z]\d\d\d,? ?)+)?( *nosort)?.*)",
             line,
         )
         noqa = nosort = False
@@ -646,7 +647,7 @@ def _as_single_imports(
                     [ast_name],
                     import_node.noqa,
                     import_node.nosort,
-                    import_node.noqa_comment
+                    import_node.noqa_comment,
                 )
         else:
             for ast_name in import_node.ast_names:
@@ -669,7 +670,7 @@ def _as_single_imports(
                             [ast_cls(star_name, asname=None)],
                             import_node.noqa,
                             import_node.nosort,
-                            import_node.noqa_comment
+                            import_node.noqa_comment,
                         )
                 else:
                     yield ClassifiedImport(
@@ -685,7 +686,7 @@ def _as_single_imports(
                         [ast_name],
                         import_node.noqa,
                         import_node.nosort,
-                        import_node.noqa_comment
+                        import_node.noqa_comment,
                     )
 
 
