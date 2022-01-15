@@ -456,6 +456,7 @@ def _parse_toplevel_imports(
     # _is_whitespace_or_comment_or_else
     lines_with_code = set(
         node.lineno for node in ast.walk(tree) if hasattr(node, "lineno")
+        and not isinstance(node, ast.alias)
     )
 
     warnings = pyflakes.checker.Checker(tree, filename)
