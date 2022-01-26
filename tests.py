@@ -181,6 +181,15 @@ per-file-ignores =
     def test_type_checking3(self):
         self._assert_file("type_checking3.py", opts=["-k"])
 
+    def test_type_checking4(self):
+        self._assert_file("type_checking4.py", opts=["-k"])
+
+    def test_type_checking5(self):
+        self._assert_file("type_checking5.py", opts=["-k"])
+
+    def test_type_checking6(self):
+        self._assert_file("type_checking6.py", opts=["-k"])
+
     def test_type_checking3_unused(self):
         self._assert_file(
             "type_checking3.py", checkfile="type_checking3.no_unused.py"
