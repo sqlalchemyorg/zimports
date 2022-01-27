@@ -1,3 +1,4 @@
+import enum
 import ast
 from ast import parse
 import codecs
@@ -26,6 +27,12 @@ from .vendored.flake8 import matches_filename
 from .vendored.flake8 import normalize_path
 
 
+class RewritePass(enum.Enum):
+    PLAIN = 0
+    TYPE_CHECK = 1
+    ANTI_TYPE_CHECK = 2
+
+
 @dc.dataclass
 class Rewriter:
     options: Any
@@ -45,11 +52,18 @@ class Rewriter:
             "removed_imports": 0,
         }
 
-    def _do_rewrite(self, source_lines: List[str], type_check_pass: bool):
-        if type_check_pass:
+    def _do_rewrite(
+        self, source_lines: List[str], type_check_pass: RewritePass
+    ):
+        if type_check_pass in (
+            RewritePass.TYPE_CHECK,
+            RewritePass.ANTI_TYPE_CHECK,
+        ):
             # Stats are collected only on the non type check pass.
             stats = self.stats.copy()
-            type_checking_blocks = TypeCheckingBlocks(source_lines)
+            type_checking_blocks = TypeCheckingBlocks(
+                source_lines, type_check_pass
+            )
         else:
             stats = self.stats
             type_checking_blocks = None
@@ -84,7 +98,6 @@ class Rewriter:
                     stats,
                 )
             )
-
         on_source_lines = _write_source(
             source_lines,
             imports,
@@ -93,11 +106,13 @@ class Rewriter:
             imports_start_on,
             self.style,
         )
-        if type_check_pass:
-            TypeCheckingBlocks(on_source_lines).remove_empty_blocks(
-                on_source_lines
+        if type_check_pass is not RewritePass.PLAIN:
+            TypeCheckingBlocks(
+                on_source_lines, type_check_pass
+            ).remove_empty_blocks(on_source_lines)
+            type_checking_blocks = TypeCheckingBlocks(
+                on_source_lines, type_check_pass
             )
-            type_checking_blocks = TypeCheckingBlocks(on_source_lines)
         # now parse again.  Because pyflakes won't tell us about unused
         # imports that are not the first import, we had to flatten first.
         imports, warnings, lines_with_code = _parse_toplevel_imports(
@@ -108,7 +123,7 @@ class Rewriter:
             drill_for_warnings=True,
         )
 
-        if type_check_pass:
+        if type_check_pass is not RewritePass.PLAIN:
             # now remove unused names from the imports if keep unused was not
             # specified in the arguments
             if self.options.keep_unused_type_checking is False:
@@ -150,15 +165,25 @@ class Rewriter:
             imports_start_on,
             self.style,
         )
-        if type_check_pass:
-            TypeCheckingBlocks(rewritten).remove_empty_blocks(rewritten)
+        if type_check_pass is not RewritePass.PLAIN:
+            TypeCheckingBlocks(rewritten, type_check_pass).remove_empty_blocks(
+                rewritten
+            )
         return rewritten
 
     def rewrite(self):
-        # does two passes: first one handles only the type checking imports;
-        # second one handles the top level imports instead.
-        rewritten = self._do_rewrite(self.source_lines, type_check_pass=True)
-        rewritten = self._do_rewrite(rewritten, type_check_pass=False)
+        # pass for each distinct block we want to write
+        rewritten = self._do_rewrite(
+            self.source_lines,
+            type_check_pass=RewritePass.TYPE_CHECK,
+        )
+        rewritten = self._do_rewrite(
+            rewritten,
+            type_check_pass=RewritePass.ANTI_TYPE_CHECK,
+        )
+        rewritten = self._do_rewrite(
+            rewritten, type_check_pass=RewritePass.PLAIN
+        )
 
         differ = list(difflib.Differ().compare(self.source_lines, rewritten))
 
@@ -172,29 +197,79 @@ class Rewriter:
 
 
 class TypeCheckingBlocks:
-    def __init__(self, source_lines):
+    def __init__(self, source_lines, type):
         self.type_checking_blocks = []
+        self.anti_type_checking_blocks = []
+        self.type = type
+
         in_type_checking_block = False
+        in_anti_type_checking_block = False
+
         for lineno, line in enumerate(source_lines, 1):
             if re.match(r"^if [\w+\.]*TYPE_CHECKING:", line):
                 # we are inside an "if TYPE_CHECKING:" block
                 in_type_checking_block = True
-                self.type_checking_blocks.append((lineno, set()))
+                self.type_checking_blocks.append((lineno, set(), -1))
             elif in_type_checking_block:
-                if line and not re.match(r"^\s+(from|import)", line):
-                    # line is not empty and not an indented import so the
-                    # type checking import block has ended
-                    in_type_checking_block = False
+                if line and re.match(r"^(?:else|elif)", line):
+                    # it's an else.  new typing block
+                    in_anti_type_checking_block = True
+                    self.anti_type_checking_blocks.append(
+                        (lineno, set(), self.type_checking_blocks[-1][0])
+                    )
+                elif line and re.match(r"^[a-zA-Z]", line):
+                    # line is a non-indented, non empty line starting
+                    # with a letter, so it's code
+                    in_type_checking_block = (
+                        in_anti_type_checking_block
+                    ) = False
+                elif in_anti_type_checking_block:
+                    self.anti_type_checking_blocks[-1][1].add(lineno)
                 else:
                     self.type_checking_blocks[-1][1].add(lineno)
 
     def __contains__(self, lineno):
-        return any(lineno in lines for _, lines in self.type_checking_blocks)
+        if self.type is RewritePass.TYPE_CHECK:
+            return any(
+                lineno in lines for _, lines, _ in self.type_checking_blocks
+            )
+        elif self.type is RewritePass.ANTI_TYPE_CHECK:
+            return any(
+                lineno in lines
+                for _, lines, _ in self.anti_type_checking_blocks
+            )
+        else:
+            assert False
 
     def remove_empty_blocks(self, source_lines):
-        for block, lines in self.type_checking_blocks:
-            if all(not source_lines[line - 1] for line in lines):
-                source_lines[block - 1] = ""
+        if self.type is RewritePass.TYPE_CHECK:
+            removed_type_check = set()
+            for block, lines, _ in self.type_checking_blocks:
+                if all(not source_lines[line - 1] for line in lines):
+                    removed_type_check.add(block)
+                    source_lines[block - 1] = ""
+
+            if self.anti_type_checking_blocks:
+                for block, lines, typcheck in self.anti_type_checking_blocks:
+                    if typcheck in removed_type_check:
+                        source_lines[block - 1 : block - 1] = [
+                            "if TYPE_CHECKING:",
+                            "    pass",
+                        ]
+
+        elif self.type is RewritePass.ANTI_TYPE_CHECK:
+            for block, lines, typcheck_line in self.anti_type_checking_blocks:
+                if all(not source_lines[line - 1] for line in lines):
+                    source_lines[block - 1] = ""
+                    if source_lines[typcheck_line - 1 : typcheck_line + 1] == [
+                        "if TYPE_CHECKING:",
+                        "    pass",
+                    ]:
+                        source_lines[
+                            typcheck_line - 1 : typcheck_line + 1
+                        ] = []
+        else:
+            assert False
 
 
 def _get_import_discard_lines(
