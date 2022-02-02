@@ -205,6 +205,9 @@ per-file-ignores =
     def test_delayed_import_typing(self):
         self._assert_file("delayed_import_typing.py")
 
+    def test_issue_34(self):
+        self._assert_file("issue_34.py")
+
 
 sqlalchemy_names = [
     "alias",

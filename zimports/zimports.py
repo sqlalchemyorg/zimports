@@ -217,7 +217,7 @@ class TypeCheckingBlocks:
                     self.anti_type_checking_blocks.append(
                         (lineno, set(), self.type_checking_blocks[-1][0])
                     )
-                elif line and re.match(r"^[a-zA-Z]", line):
+                elif line and re.match(r"^[a-zA-Z0-9_]", line):
                     # line is a non-indented, non empty line starting
                     # with a letter, so it's code
                     in_type_checking_block = (
