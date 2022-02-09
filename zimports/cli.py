@@ -47,6 +47,12 @@ def main(argv=None):
         "[flake8] import-order-style by default, or defaults to 'google'",
     )
     parser.add_argument(
+        "--black-line-length",
+        type=int,
+        help="Format long imports past given line length using Black-style "
+        "formatting"
+    )
+    parser.add_argument(
         "--multi-imports",
         action="store_true",
         help="If set, multiple imports can exist on one line",

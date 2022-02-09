@@ -208,6 +208,18 @@ per-file-ignores =
     def test_issue_34(self):
         self._assert_file("issue_34.py")
 
+    def test_maintain_formatting(self):
+        self._assert_file(
+            "maintain_formatting.py", opts=["--black-line-length", "79"]
+        )
+
+    def test_maintain_formatting_multiline(self):
+        self._assert_file(
+            "maintain_formatting.py",
+            checkfile="maintain_formatting_multiline.expected.py",
+            opts=["--multi-imports", "--black-line-length", "79"],
+        )
+
 
 sqlalchemy_names = [
     "alias",
