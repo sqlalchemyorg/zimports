@@ -39,3 +39,35 @@ jobs:
       - name: Run tests
         run: |
           tox
+
+  run-lint:
+    name: lint-${{ matrix.python-version }}
+    runs-on: "ubuntu-latest"
+    strategy:
+      # run this job using this matrix, excluding some combinations below.
+      matrix:
+        python-version:
+          - "3.10"
+
+      fail-fast: false
+
+    # steps to run in each job. Some are github actions, others run shell commands
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - name: Set up python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade tox setuptools
+          pip list
+
+      - name: Run tests
+        run: tox -e lint
+

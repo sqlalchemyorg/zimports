@@ -125,8 +125,12 @@ The script can run without any configuration, options are as follows::
     --diff                don't modify files, just dump out diffs
     --stdout              dump file output to stdout
 
-Typically, configuration will be in ``setup.cfg`` for flake8 (support for
-tox.ini, pyproject.toml is TODO)::
+Configuration is currently broken up between consumption of flake8 parameters
+from ``setup.cfg``, and then additional zimports parameters in
+``pyproject.toml`` (as of version 0.5.0) - unification of these two files will
+be in a future release, possibly when flake8 adds toml support::
+
+    # setup.cfg
 
     [flake8]
     enable-extensions = G
@@ -138,6 +142,21 @@ tox.ini, pyproject.toml is TODO)::
         W503,W504
     import-order-style = google
     application-import-names = sqlalchemy,test
+
+    # pyproject.toml, integrated with black
+
+    [tool.black]
+    line-length = 79
+    target-version = ['py37']
+
+
+    [tool.zimports]
+    black-line-length = 79
+    keep-unused-type-checking = true
+
+    # other options:
+    # multi-imports = true
+    # keep-unused = true
 
 Then, a typical run on a mostly clean source tree looks like::
 
@@ -209,7 +228,7 @@ zimports to be used, such as ``"master"`` or ``"0.1.3"``:
 
     repos:
     -   repo: https://github.com/sqlalchemyorg/zimports/
-        rev: v0.4.0
+        rev: v0.4.5
         hooks:
         -   id: zimports
 
