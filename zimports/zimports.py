@@ -16,7 +16,7 @@ from typing import List
 from typing import NamedTuple
 from typing import Optional
 from typing import Set
-from typing import Tuple
+from typing import Tuple, Iterator
 
 import flake8_import_order as f8io
 from flake8_import_order.styles import lookup_entry_point
@@ -184,6 +184,11 @@ class Rewriter:
         rewritten = self._do_rewrite(
             rewritten, type_check_pass=RewritePass.PLAIN
         )
+
+        if self.options.black_line_length:
+            rewritten = list(
+                _mini_black_format(rewritten, self.options.black_line_length)
+            )
 
         differ = list(difflib.Differ().compare(self.source_lines, rewritten))
 
@@ -781,10 +786,28 @@ def sort_imports(style: Any, imports: List[ClassifiedImport], options: Any):
     return sorted_, nosort
 
 
-def _lines_with_newlines(lines):
+def _lines_with_newlines(lines) -> Iterator[str]:
     for line in lines[0:-1]:
         yield line + "\n"
     yield lines[-1]
+
+
+def _mini_black_format(lines: List[str], line_length) -> Iterator[str]:
+    for line in lines:
+        if len(line) >= line_length:
+            from_imp_match = re.match("^(\s*)from (.+?) import (.+)", line)
+            if not from_imp_match:
+                yield line
+            else:
+                leading_whitespace = from_imp_match.group(1)
+                module = from_imp_match.group(2)
+                names = re.split(r", ", from_imp_match.group(3))
+                yield f"{leading_whitespace}from {module} import ("
+                for name in names:
+                    yield f"{leading_whitespace}    {name},"
+                yield ")"
+        else:
+            yield line
 
 
 def _read_python_source(filename):
@@ -896,6 +919,8 @@ def _run_file(options, filename):
         )
 
     if not options.statsonly:
+
+
         if options.diff:
             sys.stdout.writelines(
                 difflib.unified_diff(
