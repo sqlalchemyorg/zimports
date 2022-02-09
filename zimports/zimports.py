@@ -1,9 +1,9 @@
-import enum
 import ast
 from ast import parse
 import codecs
 import dataclasses as dc
 import difflib
+import enum
 import importlib
 import io
 import os
@@ -12,11 +12,12 @@ import sys
 import time
 from typing import Any
 from typing import Iterable
+from typing import Iterator
 from typing import List
 from typing import NamedTuple
 from typing import Optional
 from typing import Set
-from typing import Tuple, Iterator
+from typing import Tuple
 
 import flake8_import_order as f8io
 from flake8_import_order.styles import lookup_entry_point
@@ -202,10 +203,10 @@ class Rewriter:
 
 
 class TypeCheckingBlocks:
-    def __init__(self, source_lines, type):
+    def __init__(self, source_lines, type_):
         self.type_checking_blocks = []
         self.anti_type_checking_blocks = []
-        self.type = type
+        self.type = type_
 
         in_type_checking_block = False
         in_anti_type_checking_block = False
@@ -795,7 +796,7 @@ def _lines_with_newlines(lines) -> Iterator[str]:
 def _mini_black_format(lines: List[str], line_length) -> Iterator[str]:
     for line in lines:
         if len(line) >= line_length:
-            from_imp_match = re.match("^(\s*)from (.+?) import (.+)", line)
+            from_imp_match = re.match(r"^(\s*)from (.+?) import (.+)", line)
             if not from_imp_match:
                 yield line
             else:
@@ -919,7 +920,6 @@ def _run_file(options, filename):
         )
 
     if not options.statsonly:
-
 
         if options.diff:
             sys.stdout.writelines(

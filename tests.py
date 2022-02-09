@@ -54,7 +54,10 @@ class ImportsTest(unittest.TestCase):
 
         with self._simulate_importlib(), self._capture_stdout() as buf:
             zimports.main(
-                ["test_files/%s" % filename] + ["--stdout"] + list(opts)
+                ["test_files/%s" % filename]
+                + ["--toml-config", "_fake.toml"]
+                + ["--stdout"]
+                + list(opts)
             )
 
         if checkfile is None:

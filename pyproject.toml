@@ -5,3 +5,8 @@ requires = ['setuptools >= 44', 'wheel']
 [tool.black]
 line-length = 79
 target-version = ['py37']
+exclude = './test_files'
+
+[tool.zimports]
+black-line-length = 79
+keep-unused-type-checking = true
