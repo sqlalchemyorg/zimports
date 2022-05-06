@@ -4,8 +4,10 @@ import codecs
 import dataclasses as dc
 import difflib
 import enum
+from functools import partial
 import importlib
 import io
+from multiprocessing import Pool
 import os
 import re
 import sys
@@ -945,10 +947,19 @@ def _run_file(options, filename):
 def run_with_options(options):
     for filename in options.filename:
         if os.path.isdir(filename):
-            for root, dirs, files in os.walk(filename):
-                for file in files:
-                    if file.endswith(".py") or file.endswith(".pyi"):
-                        _run_file(options, os.path.join(root, file))
 
+            def iter_files():
+                for root, dirs, files in os.walk(filename):
+                    for file in files:
+                        if file.endswith(".py") or file.endswith(".pyi"):
+                            yield os.path.join(root, file)
+
+            if options.workers is None or options.workers <= 1:
+                for file in iter_files():
+                    _run_file(options, file)
+            else:
+                func = partial(_run_file, options)
+                with Pool(options.workers) as pool:
+                    pool.map(func, iter_files())
         else:
             _run_file(options, filename)

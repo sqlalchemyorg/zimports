@@ -130,6 +130,14 @@ def main(argv=None):
     parser.add_argument(
         "filename", nargs="+", help="Python filename(s) or directories"
     )
+    cpu = os.cpu_count()
+    parser.add_argument(
+        "-W",
+        "--workers",
+        type=int,
+        default=cpu,
+        help=f"Number of parallel workers  [default: {cpu};x>=1]",
+    )
 
     options = parser.parse_args(argv)
 
