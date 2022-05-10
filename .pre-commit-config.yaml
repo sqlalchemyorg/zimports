@@ -4,7 +4,7 @@ exclude: '.*test_files/.*'
 
 repos:
 -   repo: https://github.com/python/black
-    rev: 21.12b0
+    rev: 22.3.0
     hooks:
     -   id: black
 
