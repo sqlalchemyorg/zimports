@@ -80,6 +80,42 @@ I've just gone through a whole bunch.     I need one that:
   pyflakes and now flake8-import-order do most of the hard work) this is an
   extremely simple job, there's (still) no  need for a giant application here.
 
+But what about... isort ??
+--------------------------
+
+Since I developed zimports some years ago and now have it on all my projects,
+isort has come out and is widely becoming accepted as the de-facto import
+sorter, because it's actually super nice and has tons of features.  It popped up
+turned on by default in my vscode IDE and it's under pycqa, it's clearly the
+winning tool in this space.
+
+So I would *like* to use isort, and I've tried it out. I was able to get it 99%
+equivalent to how we sort our imports now, with the exception of a weird
+relative import issue that still wouldn't compare against
+``flake8-import-order`` (it seemed like lexical sorting wasn't working
+correctly).   Maybe we can get that little part working, but that's not the main
+issue.
+
+The bigger shortcoming was IIUC it, like "importanize" mentioned previously,
+just reformats the imports that are present.   It won't remove unused imports,
+nor does it have any ability to expand ``import *`` into individual imports,
+since it isn't looking at the rest of the code.    zimports actually hangs on top of
+``flake8`` so that we can remove unused imports and it also uses ``flake8``
+output along with a module import path in order to expand out "*" imports.
+I use this feature *all the time* when I type out test scripts for SQLAlchemy,
+I just start with ``from sqlalchemy import *`` and have zimports clean it all up.
+
+Maybe there would be a way to keep zimports for that part, and then use isort
+for the actual sorting.  But then I'm still just using zimports, and while isort
+definitely does a better job at finding imports to sort (it does them inside
+method bodies, inside of cython files, wow), it's not really worth it right now
+for me to change everything when I still have to maintain zimports anyway.
+
+TL;DR; yes go use isort, I have no desire to support zimports for other people!
+:)  zimports does a few things that I personally like a
+lot, especially removing unused imports which is totally essential for my
+use cases.
+
 Usage
 =====
 
