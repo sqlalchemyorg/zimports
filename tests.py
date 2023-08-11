@@ -22,6 +22,8 @@ class ImportsTest(unittest.TestCase):
                 return self.mock_sqlalchemy
             elif name == "sqlalchemy.orm":
                 return self.mock_sqlalchemy_orm
+            elif name == "zimports":
+                return __import__("zimports")
             else:
                 raise ImportError(name)
 
@@ -51,7 +53,6 @@ class ImportsTest(unittest.TestCase):
         encoding="utf-8",
         checkfile=None,
     ):
-
         with self._simulate_importlib(), self._capture_stdout() as buf:
             zimports.main(
                 ["test_files/%s" % filename]
