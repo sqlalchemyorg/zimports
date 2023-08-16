@@ -22,12 +22,12 @@ from typing import Set
 from typing import Tuple
 
 import flake8_import_order as f8io
-from flake8_import_order.styles import lookup_entry_point
 import pyflakes.checker
 import pyflakes.messages
 
 from .vendored.flake8 import matches_filename
 from .vendored.flake8 import normalize_path
+from .vendored.flake8_import_order import lookup_entry_point
 
 
 class RewritePass(enum.Enum):
@@ -673,7 +673,6 @@ def _remove_unused_names(
 def _dedupe_single_imports(
     import_nodes: Iterable[ClassifiedImport], stats: dict
 ):
-
     seen = {}
     orig_order: List[Tuple[ClassifiedImport, Any]] = []
 
@@ -713,7 +712,6 @@ def _as_single_imports(
     stats: dict,
     expand_stars: bool = False,
 ):
-
     for import_node in import_nodes:
         if not import_node.is_from:
             for ast_name in import_node.ast_names:
@@ -885,7 +883,6 @@ def _parse_magic_encoding_comment(fp):
 
 
 def _run_file(options, filename):
-
     lines, encoding_comment = _read_python_source(filename)
     source_lines = [line.rstrip() for line in lines]
 
@@ -922,7 +919,6 @@ def _run_file(options, filename):
         )
 
     if not options.statsonly:
-
         if options.diff:
             sys.stdout.writelines(
                 difflib.unified_diff(
