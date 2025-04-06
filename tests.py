@@ -26,8 +26,6 @@ class ImportsTest(unittest.TestCase):
                 return self.mock_sqlalchemy
             elif name == "sqlalchemy.orm":
                 return self.mock_sqlalchemy_orm
-            elif name == "zimports":
-                return __import__("zimports")
             else:
                 return original_import_module(name)
 
