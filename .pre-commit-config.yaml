@@ -17,7 +17,7 @@ repos:
             - --black-line-length=79
 
 -   repo: https://github.com/pycqa/flake8
-    rev: 4.0.1
+    rev: 7.2.0
     hooks:
     -   id: flake8
         additional_dependencies:

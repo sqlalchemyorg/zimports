@@ -183,7 +183,7 @@ be in a future release, possibly when flake8 adds toml support::
 
     [tool.black]
     line-length = 79
-    target-version = ['py37']
+    target-version = ['py39']
 
 
     [tool.zimports]

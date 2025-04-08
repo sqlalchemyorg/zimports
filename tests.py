@@ -17,15 +17,17 @@ class ImportsTest(unittest.TestCase):
 
     @contextlib.contextmanager
     def _simulate_importlib(self):
+        import importlib
+
+        original_import_module = importlib.import_module
+
         def import_module(name):
             if name == "sqlalchemy":
                 return self.mock_sqlalchemy
             elif name == "sqlalchemy.orm":
                 return self.mock_sqlalchemy_orm
-            elif name == "zimports":
-                return __import__("zimports")
             else:
-                raise ImportError(name)
+                return original_import_module(name)
 
         with mock.patch(
             "zimports.zimports.importlib.import_module", import_module
