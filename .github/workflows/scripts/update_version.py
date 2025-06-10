@@ -42,30 +42,30 @@ def go(args):
     if args.set_version and not is_canonical(args.set_version):
         raise RuntimeError(f"Cannot use {args.set_version!r} as version")
 
-    setup = pathlib.Path("setup.cfg")
-    setup_text = setup.read_text()
-    new_setup_text = []
+    pyproject = pathlib.Path("pyproject.toml")
+    pyproject_text = pyproject.read_text()
+    new_pyproject_text = []
     found = False
-    for line in setup_text.split("\n"):
+    for line in pyproject_text.split("\n"):
         if not line.startswith("version = "):
-            new_setup_text.append(line)
+            new_pyproject_text.append(line)
             continue
         if found:
             raise RuntimeError(
                 "Multiple lines starting with 'version =' found"
             )
         if args.set_version:
-            new_setup_text.append(f"version = {args.set_version}")
+            new_pyproject_text.append(f'version = "{args.set_version}"')
             version = args.set_version
         else:
-            current_version = line.split(" ")[-1]
+            current_version = line.split(" ")[-1].strip('"')
             version = next_version(current_version)
-            new_setup_text.append(f"version = {version}")
+            new_pyproject_text.append(f'version = "{version}"')
         found = True
     if not found:
         raise RuntimeError("No line found starting with 'version ='")
 
-    setup.write_text("\n".join(new_setup_text))
+    pyproject.write_text("\n".join(new_pyproject_text))
     print("Updated version to", version)
 
 
