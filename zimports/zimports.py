@@ -228,9 +228,9 @@ class TypeCheckingBlocks:
                 elif line and re.match(r"^[a-zA-Z0-9_]", line):
                     # line is a non-indented, non empty line starting
                     # with a letter, so it's code
-                    in_type_checking_block = (
-                        in_anti_type_checking_block
-                    ) = False
+                    in_type_checking_block = in_anti_type_checking_block = (
+                        False
+                    )
                 elif in_anti_type_checking_block:
                     self.anti_type_checking_blocks[-1][1].add(lineno)
                 else:
@@ -273,9 +273,9 @@ class TypeCheckingBlocks:
                         "if TYPE_CHECKING:",
                         "    pass",
                     ]:
-                        source_lines[
-                            typcheck_line - 1 : typcheck_line + 1
-                        ] = []
+                        source_lines[typcheck_line - 1 : typcheck_line + 1] = (
+                            []
+                        )
         else:
             assert False
 
@@ -490,7 +490,9 @@ class ImportVisitor(f8io.ImportVisitor):
                 type_ = types_.pop()
             else:
                 type_ = f8io.ImportType.MIXED
-            noqa, nosort, noqa_comment, type_ignore = self._get_flags(node.lineno)
+            noqa, nosort, noqa_comment, type_ignore = self._get_flags(
+                node.lineno
+            )
             classified_import = ClassifiedImport(
                 type_,
                 False,
@@ -517,7 +519,9 @@ class ImportVisitor(f8io.ImportVisitor):
             else:
                 type_ = self._classify_type(module)
             names = [alias.name for alias in node.names]
-            noqa, nosort, noqa_comment, type_ignore = self._get_flags(node.lineno)
+            noqa, nosort, noqa_comment, type_ignore = self._get_flags(
+                node.lineno
+            )
             classified_import = ClassifiedImport(
                 type_,
                 True,
@@ -914,11 +918,13 @@ def _run_file(options, filename):
             "%s    %s ([%d%% of lines are imports] "
             "[source +%dL/-%dL] [%d imports removed in %.4f sec])\n"
             % (
-                "[Writing]   "
-                if not options.diff
-                and not options.statsonly
-                and not options.stdout
-                else "[Generating]",
+                (
+                    "[Writing]   "
+                    if not options.diff
+                    and not options.statsonly
+                    and not options.stdout
+                    else "[Generating]"
+                ),
                 filename,
                 stats["import_proportion"],
                 stats["added"],
