@@ -9,6 +9,8 @@ import zimports
 
 
 class ImportsTest(unittest.TestCase):
+    maxDiff = None
+
     @contextlib.contextmanager
     def _capture_stdout(self):
         buf = io.StringIO()
