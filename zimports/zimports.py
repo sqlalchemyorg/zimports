@@ -1,6 +1,8 @@
 import ast
 from ast import parse
 import codecs
+from collections.abc import Iterable
+from collections.abc import Iterator
 import dataclasses as dc
 import difflib
 import enum
@@ -13,13 +15,8 @@ import re
 import sys
 import time
 from typing import Any
-from collections.abc import Iterable
-from collections.abc import Iterator
-from typing import List
 from typing import NamedTuple
 from typing import Optional
-from typing import Set
-from typing import Tuple
 
 import flake8_import_order as f8io
 import pyflakes.checker
