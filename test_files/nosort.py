@@ -1,9 +1,9 @@
 import asyncio
 import sys
 import typing
-import greenlet  # type: ignore
+import greenlet  # type: ignore # noqa F401
 from typing import Any
-from typing import Callable  # type: ignore # noqa F401
+from typing import Callable  # type: ignore
 from typing import Coroutine
 
 from contextvars import copy_context as _copy_context  # noqa nosort
