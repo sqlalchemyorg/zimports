@@ -4,12 +4,12 @@ exclude: '.*test_files/.*'
 
 repos:
 -   repo: https://github.com/python/black
-    rev: 22.3.0
+    rev: 25.1.0
     hooks:
     -   id: black
 
 -   repo: https://github.com/sqlalchemyorg/zimports
-    rev: v0.4.5
+    rev: v0.6.1
     hooks:
     -   id: zimports
         args:
