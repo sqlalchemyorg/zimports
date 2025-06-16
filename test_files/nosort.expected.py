@@ -2,7 +2,7 @@ import asyncio
 import sys
 import typing
 from typing import Any
-from typing import Callable  # type: ignore # noqa F401
+from typing import Callable  # type: ignore
 from typing import Coroutine
 
 import greenlet  # type: ignore # noqa F401

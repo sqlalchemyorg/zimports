@@ -377,18 +377,20 @@ def _write_import(import_node):
     modules.sort(key=lambda x: x.lower())
     modules = ", ".join(modules)
     if not import_node.is_from:
-        return "%simport %s%s" % (
+        return "%simport %s%s%s" % (
             " " * import_node.col_offset,
             modules,
             import_node.noqa_comment if import_node.noqa else "",
+            "  # type: ignore" if import_node.type_ignore else "",
         )
     else:
-        return "%sfrom %s%s import %s%s" % (
+        return "%sfrom %s%s import %s%s%s" % (
             " " * import_node.col_offset,
             "." * import_node.level,
             import_node.modules[0] or "",
             modules,
             import_node.noqa_comment if import_node.noqa else "",
+            "  # type: ignore" if import_node.type_ignore else "",
         )
 
 
@@ -406,6 +408,7 @@ class ClassifiedImport(NamedTuple):
     noqa: bool
     nosort: bool
     noqa_comment: Optional[str]
+    type_ignore: bool
 
     def __hash__(self):
         return hash((self.type, self.is_from, self.lineno))
@@ -463,14 +466,16 @@ class ImportVisitor(f8io.ImportVisitor):
             r"# noqa\:?(?: +(?:[A-Z]\d\d\d,? ?)+)?( *nosort)?.*)",
             line,
         )
-        noqa = nosort = False
+        noqa = nosort = type_ignore = False
         noqa_comment = None
         if symbols:
             noqa = True
             noqa_comment = symbols.group(1)
             if symbols.group(2):
                 nosort = True
-        return noqa, nosort, noqa_comment
+        elif "  # type: ignore" in line:
+            type_ignore = True
+        return noqa, nosort, noqa_comment, type_ignore
 
     def _check_node(self, node):
         return (self.top_level and node.col_offset == 0) or (
@@ -485,7 +490,7 @@ class ImportVisitor(f8io.ImportVisitor):
                 type_ = types_.pop()
             else:
                 type_ = f8io.ImportType.MIXED
-            noqa, nosort, noqa_comment = self._get_flags(node.lineno)
+            noqa, nosort, noqa_comment, type_ignore = self._get_flags(node.lineno)
             classified_import = ClassifiedImport(
                 type_,
                 False,
@@ -500,6 +505,7 @@ class ImportVisitor(f8io.ImportVisitor):
                 noqa,
                 nosort,
                 noqa_comment,
+                type_ignore,
             )
             self.imports.append(classified_import)
 
@@ -511,7 +517,7 @@ class ImportVisitor(f8io.ImportVisitor):
             else:
                 type_ = self._classify_type(module)
             names = [alias.name for alias in node.names]
-            noqa, nosort, noqa_comment = self._get_flags(node.lineno)
+            noqa, nosort, noqa_comment, type_ignore = self._get_flags(node.lineno)
             classified_import = ClassifiedImport(
                 type_,
                 True,
@@ -526,6 +532,7 @@ class ImportVisitor(f8io.ImportVisitor):
                 noqa,
                 nosort,
                 noqa_comment,
+                type_ignore,
             )
             self.imports.append(classified_import)
 
@@ -729,6 +736,7 @@ def _as_single_imports(
                     import_node.noqa,
                     import_node.nosort,
                     import_node.noqa_comment,
+                    import_node.type_ignore,
                 )
         else:
             for ast_name in import_node.ast_names:
@@ -752,6 +760,7 @@ def _as_single_imports(
                             import_node.noqa,
                             import_node.nosort,
                             import_node.noqa_comment,
+                            import_node.type_ignore,
                         )
                 else:
                     yield ClassifiedImport(
@@ -768,6 +777,7 @@ def _as_single_imports(
                         import_node.noqa,
                         import_node.nosort,
                         import_node.noqa_comment,
+                        import_node.type_ignore,
                     )
 
 
