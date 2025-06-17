@@ -1,6 +1,8 @@
 import ast
 from ast import parse
 import codecs
+from collections.abc import Iterable
+from collections.abc import Iterator
 import dataclasses as dc
 import difflib
 import enum
@@ -13,13 +15,8 @@ import re
 import sys
 import time
 from typing import Any
-from typing import Iterable
-from typing import Iterator
-from typing import List
 from typing import NamedTuple
 from typing import Optional
-from typing import Set
-from typing import Tuple
 
 import flake8_import_order as f8io
 import pyflakes.checker
@@ -40,7 +37,7 @@ class RewritePass(enum.Enum):
 class Rewriter:
     options: Any
     filename: str
-    source_lines: List[str]
+    source_lines: list[str]
 
     def __post_init__(self):
         self.keep_threshhold: float = self.options.heuristic_unused
@@ -56,7 +53,7 @@ class Rewriter:
         }
 
     def _do_rewrite(
-        self, source_lines: List[str], type_check_pass: RewritePass
+        self, source_lines: list[str], type_check_pass: RewritePass
     ):
         if type_check_pass in (
             RewritePass.TYPE_CHECK,
@@ -86,7 +83,7 @@ class Rewriter:
         # output.  E.g. lines where import statements occurred, or the
         # extra lines they take up which we figure out by looking at the
         # "gap" between statements
-        import_gap_lines: Set[int] = _get_import_discard_lines(
+        import_gap_lines: set[int] = _get_import_discard_lines(
             source_lines, imports, lines_with_code
         )
 
@@ -281,13 +278,13 @@ class TypeCheckingBlocks:
 
 
 def _get_import_discard_lines(
-    source_lines: List[str],
-    imports: List["ClassifiedImport"],
-    lines_with_code: Set[str],
+    source_lines: list[str],
+    imports: list["ClassifiedImport"],
+    lines_with_code: set[str],
 ):
     """Get line numbers that are part of imports but not in the AST."""
 
-    import_gap_lines: Set[int] = {node.lineno for node in imports}
+    import_gap_lines: set[int] = {node.lineno for node in imports}
 
     intermediary_whitespace_lines = []
 
@@ -336,14 +333,14 @@ def _is_whitespace_or_comment_or_else(line):
 
 
 def _write_source(
-    source_lines: List[str],
-    imports: List["ClassifiedImport"],
+    source_lines: list[str],
+    imports: list["ClassifiedImport"],
     nosort_imports,
-    import_gap_lines: Set[int],
+    import_gap_lines: set[int],
     imports_start_on: int,
     style: Any,
 ):
-    buf: List[str] = []
+    buf: list[str] = []
     previous_import = None
     for lineno, line in enumerate(source_lines, 1):
         if lineno == imports_start_on:
@@ -366,31 +363,27 @@ def _write_source(
     return buf
 
 
-def _write_import(import_node):
+def _write_import(import_node: "ClassifiedImport"):
     names = import_node.render_ast_names
     modules = []
     for name in names:
         if name.asname:
-            modules.append("%s as %s" % (name.name, name.asname))
+            modules.append(f"{name.name} as {name.asname}")
         else:
             modules.append(name.name)
     modules.sort(key=lambda x: x.lower())
     modules = ", ".join(modules)
+    offset = " " * import_node.col_offset
+    type_ignore = import_node.type_ignore_comment or ""
+    noqa = import_node.noqa_comment or ""
     if not import_node.is_from:
-        return "%simport %s%s%s" % (
-            " " * import_node.col_offset,
-            modules,
-            import_node.noqa_comment if import_node.noqa else "",
-            "  # type: ignore" if import_node.type_ignore else "",
-        )
+        return f"{offset}import {modules}{type_ignore}{noqa}"
     else:
-        return "%sfrom %s%s import %s%s%s" % (
-            " " * import_node.col_offset,
-            "." * import_node.level,
-            import_node.modules[0] or "",
-            modules,
-            import_node.noqa_comment if import_node.noqa else "",
-            "  # type: ignore" if import_node.type_ignore else "",
+        level = "." * import_node.level
+        module = import_node.modules[0] or ""
+        return (
+            f"{offset}from {level}{module} import "
+            f"{modules}{type_ignore}{noqa}"
         )
 
 
@@ -405,10 +398,9 @@ class ClassifiedImport(NamedTuple):
     package: str
     ast_names: Optional[str]
     render_ast_names: list
-    noqa: bool
     nosort: bool
     noqa_comment: Optional[str]
-    type_ignore: bool
+    type_ignore_comment: Optional[str]
 
     def __hash__(self):
         return hash((self.type, self.is_from, self.lineno))
@@ -433,7 +425,7 @@ class ClassifiedImport(NamedTuple):
                         ("." * self.level)
                         + (self.modules[0] + "." if self.modules[0] else "")
                         + (
-                            "%s as %s" % (ast_name.name, ast_name.asname)
+                            f"{ast_name.name} as {ast_name.asname}"
                             if ast_name.asname
                             else ast_name.name
                         )
@@ -442,6 +434,10 @@ class ClassifiedImport(NamedTuple):
                 )
                 for ast_name in self.ast_names
             ]
+
+    @property
+    def noqa(self) -> bool:
+        return self.noqa_comment is not None
 
 
 class ImportVisitor(f8io.ImportVisitor):
@@ -452,7 +448,7 @@ class ImportVisitor(f8io.ImportVisitor):
         application_package_names,
         type_checking_blocks,
     ):
-        self.imports: List[ClassifiedImport] = []
+        self.imports: list[ClassifiedImport] = []
         self.source_lines = source_lines
         self.application_import_names = frozenset(application_import_names)
         self.application_package_names = frozenset(application_package_names)
@@ -462,20 +458,20 @@ class ImportVisitor(f8io.ImportVisitor):
     def _get_flags(self, lineno):
         line = self.source_lines[lineno - 1].rstrip()
         symbols = re.match(
-            r".*?( +(?:# type: ignore +)?"
-            r"# noqa\:?(?: +(?:[A-Z]\d\d\d,? ?)+)?( *nosort)?.*)",
+            r"^.*?( +# type: ignore(?:\[[^]]+\])?)?"
+            r"( +# noqa\:?(?: +(?:[A-Z]\d+,? ?)+)?( *nosort)?.*)?$",
             line,
         )
-        noqa = nosort = type_ignore = False
-        noqa_comment = None
+        nosort = False
+        noqa_comment = type_ignore_comment = None
         if symbols:
-            noqa = True
-            noqa_comment = symbols.group(1)
+            if symbols.group(1):
+                type_ignore_comment = symbols.group(1)
             if symbols.group(2):
+                noqa_comment = symbols.group(2)
+            if symbols.group(3):
                 nosort = True
-        elif "  # type: ignore" in line:
-            type_ignore = True
-        return noqa, nosort, noqa_comment, type_ignore
+        return nosort, noqa_comment, type_ignore_comment
 
     def _check_node(self, node):
         return (self.top_level and node.col_offset == 0) or (
@@ -490,7 +486,7 @@ class ImportVisitor(f8io.ImportVisitor):
                 type_ = types_.pop()
             else:
                 type_ = f8io.ImportType.MIXED
-            noqa, nosort, noqa_comment, type_ignore = self._get_flags(
+            nosort, noqa_comment, type_ignore_comment = self._get_flags(
                 node.lineno
             )
             classified_import = ClassifiedImport(
@@ -504,10 +500,9 @@ class ImportVisitor(f8io.ImportVisitor):
                 f8io.root_package_name(modules[0]),
                 node.names,
                 list(node.names),
-                noqa,
                 nosort,
                 noqa_comment,
-                type_ignore,
+                type_ignore_comment,
             )
             self.imports.append(classified_import)
 
@@ -519,7 +514,7 @@ class ImportVisitor(f8io.ImportVisitor):
             else:
                 type_ = self._classify_type(module)
             names = [alias.name for alias in node.names]
-            noqa, nosort, noqa_comment, type_ignore = self._get_flags(
+            nosort, noqa_comment, type_ignore_comment = self._get_flags(
                 node.lineno
             )
             classified_import = ClassifiedImport(
@@ -533,10 +528,9 @@ class ImportVisitor(f8io.ImportVisitor):
                 f8io.root_package_name(module),
                 node.names,
                 list(node.names),
-                noqa,
                 nosort,
                 noqa_comment,
-                type_ignore,
+                type_ignore_comment,
             )
             self.imports.append(classified_import)
 
@@ -544,7 +538,7 @@ class ImportVisitor(f8io.ImportVisitor):
 def _parse_toplevel_imports(
     options: Any,
     filename: str,
-    source_lines: List[str],
+    source_lines: list[str],
     type_checking_blocks: Optional[TypeCheckingBlocks],
     drill_for_warnings: bool = False,
 ):
@@ -555,11 +549,11 @@ def _parse_toplevel_imports(
     # NOTE: the line `else:` does not appear in the ast tree, since it's
     # considered inside the `if` block. It's ignored by the function
     # _is_whitespace_or_comment_or_else
-    lines_with_code = set(
+    lines_with_code = {
         node.lineno
         for node in ast.walk(tree)
         if hasattr(node, "lineno") and not isinstance(node, ast.alias)
-    )
+    }
 
     warnings = pyflakes.checker.Checker(tree, filename)
 
@@ -584,7 +578,7 @@ def _parse_toplevel_imports(
 def _drill_for_warnings(
     options: Any,
     filename: str,
-    source_lines: List[str],
+    source_lines: list[str],
     warnings: pyflakes.checker.Checker,
     type_checking_blocks: Optional[TypeCheckingBlocks],
 ):
@@ -601,7 +595,7 @@ def _drill_for_warnings(
                 ignore_errors.update(codes)
 
     source_lines = list(source_lines)
-    warnings_set: Set[Tuple[str, int]] = set()
+    warnings_set: set[tuple[str, int]] = set()
     seen_lineno = set()
     top_level = type_checking_blocks is None
     while True:
@@ -647,13 +641,13 @@ def _drill_for_warnings(
 
 
 def _remove_unused_names(
-    imports: List[ClassifiedImport],
-    warnings: Set[Tuple[str, int]],
+    imports: list[ClassifiedImport],
+    warnings: set[tuple[str, int]],
     stats: dict,
 ):
-    noqa_lines = set(
+    noqa_lines = {
         import_node.lineno for import_node in imports if import_node.noqa
-    )
+    }
 
     remove_imports = {
         (name, lineno) for name, lineno in warnings if lineno not in noqa_lines
@@ -685,7 +679,7 @@ def _dedupe_single_imports(
     import_nodes: Iterable[ClassifiedImport], stats: dict
 ):
     seen = {}
-    orig_order: List[Tuple[ClassifiedImport, Any]] = []
+    orig_order: list[tuple[ClassifiedImport, Any]] = []
 
     for import_node in import_nodes:
         if not import_node.is_from:
@@ -719,7 +713,7 @@ def _dedupe_single_imports(
 
 
 def _as_single_imports(
-    import_nodes: List[ClassifiedImport],
+    import_nodes: list[ClassifiedImport],
     stats: dict,
     expand_stars: bool = False,
 ):
@@ -737,10 +731,9 @@ def _as_single_imports(
                     import_node.package,
                     [ast_name],
                     [ast_name],
-                    import_node.noqa,
                     import_node.nosort,
                     import_node.noqa_comment,
-                    import_node.type_ignore,
+                    import_node.type_ignore_comment,
                 )
         else:
             for ast_name in import_node.ast_names:
@@ -761,10 +754,9 @@ def _as_single_imports(
                             import_node.package,
                             [ast_cls(star_name, asname=None)],
                             [ast_cls(star_name, asname=None)],
-                            import_node.noqa,
                             import_node.nosort,
                             import_node.noqa_comment,
-                            import_node.type_ignore,
+                            import_node.type_ignore_comment,
                         )
                 else:
                     yield ClassifiedImport(
@@ -778,14 +770,13 @@ def _as_single_imports(
                         import_node.package,
                         [ast_name],
                         [ast_name],
-                        import_node.noqa,
                         import_node.nosort,
                         import_node.noqa_comment,
-                        import_node.type_ignore,
+                        import_node.type_ignore_comment,
                     )
 
 
-def sort_imports(style: Any, imports: List[ClassifiedImport], options: Any):
+def sort_imports(style: Any, imports: list[ClassifiedImport], options: Any):
     tosort = []
     nosort = []
 
@@ -807,7 +798,7 @@ def _lines_with_newlines(lines) -> Iterator[str]:
     yield lines[-1]
 
 
-def _mini_black_format(lines: List[str], line_length) -> Iterator[str]:
+def _mini_black_format(lines: list[str], line_length) -> Iterator[str]:
     for line in lines:
         if len(line) >= line_length:
             from_imp_match = re.match(r"^(\s*)from (.+?) import (.+)", line)
@@ -911,7 +902,7 @@ def _run_file(options, filename):
     totaltime = stats["totaltime"]
     if not stats["is_changed"]:
         sys.stderr.write(
-            "[Unchanged]     %s (in %.4f sec)\n" % (filename, totaltime)
+            f"[Unchanged]     {filename} (in {totaltime:.4f} sec)\n"
         )
     else:
         sys.stderr.write(
