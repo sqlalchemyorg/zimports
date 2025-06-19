@@ -45,7 +45,7 @@ jobs:
         uses: sqlalchemyorg/git-auto-commit-action@sa
         with:
           commit_message: Version ${{ github.event.inputs.version }}
-          file_pattern: pyproject.toml
+          file_pattern: zimports/__init__.py
 
       - name: Get version
         # Get current version
@@ -93,7 +93,7 @@ jobs:
         uses: sqlalchemyorg/git-auto-commit-action@sa
         with:
           commit_message: Start work on ${{ steps.get-new-version.outputs.version }}
-          file_pattern: pyproject.toml
+          file_pattern: zimports/__init__.py
 
       - name: Publish distribution
         # Publish to pypi
