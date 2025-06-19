@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to use. Leave default to use the current version'
+        description: 'Version to publish. Leave default to publish the current version. Supported values are path, minor, major, etc. See https://hatch.pypa.io/1.12/version/#supported-segments for all available segments.'
         required: true
         default: '~~version~~'
 
@@ -22,19 +22,19 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.13"
 
       - name: Set version
         # A specific version was set in the action trigger.
         # Change the version in pyproject.toml to that version
         if: ${{ github.event.inputs.version != '~~version~~' }}
         run: |
-          python .github/workflows/scripts/update_version.py --set-version ${{ github.event.inputs.version }}
+          hatch version ${{ github.event.inputs.version }}
 
       - name: Commit version change
         # If the pyproject.toml version was changed, commit it.
@@ -48,7 +48,7 @@ jobs:
         # Get current version
         id: get-version
         run: |
-          version=`grep 'version =' pyproject.toml | awk '{print $NF}'`
+          version=`hatch version`
           echo $version
           echo "::set-output name=version::$version"
 
@@ -57,9 +57,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip --version
-          pip install build
+          pip install hatch
           pip list
-          python -m build --sdist --wheel .
+          python -m hatch build
 
       - name: Create release
         # Create github tag and release and upload the distribution wheels and sdist
@@ -75,13 +75,13 @@ jobs:
       - name: Next version
         # Update the version to the next version
         run: |
-          python .github/workflows/scripts/update_version.py --update-version
+          hatch version patch
 
       - name: Get version
         # Get new current version
         id: get-new-version
         run: |
-          version=`grep 'version =' pyproject.toml | awk '{print $NF}'`
+          version=`hatch version`
           echo $version
           echo "::set-output name=version::$version"
 
