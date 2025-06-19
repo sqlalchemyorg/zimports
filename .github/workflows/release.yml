@@ -31,24 +31,24 @@ jobs:
 
       - name: Set version
         # A specific version was set in the action trigger.
-        # Change the version in setup.cfg to that version
+        # Change the version in pyproject.toml to that version
         if: ${{ github.event.inputs.version != '~~version~~' }}
         run: |
           python .github/workflows/scripts/update_version.py --set-version ${{ github.event.inputs.version }}
 
       - name: Commit version change
-        # If the setup.cfg version was changed commit it.
+        # If the pyproject.toml version was changed, commit it.
         if: ${{ github.event.inputs.version != '~~version~~' }}
         uses: sqlalchemyorg/git-auto-commit-action@sa
         with:
           commit_message: Version ${{ github.event.inputs.version }}
-          file_pattern: setup.cfg
+          file_pattern: pyproject.toml
 
       - name: Get version
         # Get current version
         id: get-version
         run: |
-          version=`grep 'version =' setup.cfg | awk '{print $NF}'`
+          version=`grep 'version =' pyproject.toml | awk '{print $NF}'`
           echo $version
           echo "::set-output name=version::$version"
 
@@ -81,7 +81,7 @@ jobs:
         # Get new current version
         id: get-new-version
         run: |
-          version=`grep 'version =' setup.cfg | awk '{print $NF}'`
+          version=`grep 'version =' pyproject.toml | awk '{print $NF}'`
           echo $version
           echo "::set-output name=version::$version"
 
@@ -90,7 +90,7 @@ jobs:
         uses: sqlalchemyorg/git-auto-commit-action@sa
         with:
           commit_message: Start work on ${{ steps.get-new-version.outputs.version }}
-          file_pattern: setup.cfg
+          file_pattern: pyproject.toml
 
       - name: Publish distribution
         # Publish to pypi
