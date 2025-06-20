@@ -1,10 +1,10 @@
 [build-system]
-build-backend = 'setuptools.build_meta'
-requires = ['setuptools >= 44', 'wheel']
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "zimports"
-version = "0.6.2"
+dynamic = ["version"]
 dependencies = [
     "pyflakes",
     "flake8-import-order",
@@ -40,6 +40,17 @@ Issues = "https://github.com/sqlalchemyorg/zimports/issues"
 [project.scripts]
 zimports = "zimports:main"
 
+[tool.hatch.build.targets.sdist]
+include = ["zimports*"]
+
+[tool.hatch.version]
+path = "zimports/__init__.py"
+
+[tool.hatch.envs.test]
+dependencies = [
+  "pytest"
+]
+
 [tool.black]
 line-length = 79
 target-version = ['py39']
@@ -48,9 +59,6 @@ exclude = './test_files'
 [tool.pytest.ini_options]
 addopts = "--tb native -v -r sfxX --maxfail=25 -p no:warnings -p no:logging"
 python_files = ["tests.py"]
-
-[tool.setuptools.packages.find]
-include = ["zimports*"]
 
 [tool.zimports]
 black-line-length = 79
