@@ -110,6 +110,9 @@ class ImportsTest(unittest.TestCase):
     def test_conditional_imports(self):
         self._assert_file("conditional_imports.py")
 
+    def test_dont_touch_e501(self):
+        self._assert_file("dont_touch_e501.py", opts=["--black-line-length", "79"],)
+
     def test_sqla_test_file(self):
         self._assert_file("sqla_test_file.py")
 

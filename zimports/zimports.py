@@ -800,7 +800,7 @@ def _lines_with_newlines(lines) -> Iterator[str]:
 
 def _mini_black_format(lines: list[str], line_length) -> Iterator[str]:
     for line in lines:
-        if len(line) >= line_length:
+        if len(line) >= line_length and not re.search(r"noqa.*E501", line):
             from_imp_match = re.match(r"^(\s*)from (.+?) import (.+)", line)
             if not from_imp_match:
                 yield line
