@@ -8,16 +8,29 @@ from .vendored.flake8 import parse_files_to_codes_mapping
 from .zimports import run_with_options
 
 
-def _load_config(config_file="setup.cfg"):
-    config = configparser.ConfigParser()
-    config["flake8"] = {
+def _load_config(config_file="setup.cfg", toml_file="pyproject.toml"):
+    defaults = {
         "application-import-names": "",
         "application-package-names": "",
         "import-order-style": "google",
     }
-    config.read(config_file)
-    return config
 
+    if os.path.exists(toml_file):
+        with open(toml_file, "rb") as f:
+            toml_dict = tomli.load(f)  # type: ignore
+    else:
+        toml_dict = {}
+
+    tool = toml_dict.get("tool", {})
+    if "flake8" not in tool:
+        config = configparser.ConfigParser()
+        config["flake8"] = defaults
+        config.read(config_file)
+        return config
+    else:
+        keys_to_update = set(defaults).difference(tool["flake8"])
+        tool["flake8"].update({k: defaults[k] for k in keys_to_update})
+        return tool
 
 def _load_toml(config_file="pyproject.toml"):
 

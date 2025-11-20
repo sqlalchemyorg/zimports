@@ -33,6 +33,13 @@ class RewritePass(enum.Enum):
     ANTI_TYPE_CHECK = 2
 
 
+def _splitlist(x):
+    if isinstance(x, str):
+        return x.split(",")
+    else:
+        assert isinstance(x, list)
+        return x
+
 @dc.dataclass
 class Rewriter:
     options: Any
@@ -566,8 +573,8 @@ def _parse_toplevel_imports(
 
     f8io_visitor = ImportVisitor(
         source_lines,
-        options.application_import_names.split(","),
-        options.application_package_names.split(","),
+        _splitlist(options.application_import_names),
+        _splitlist(options.application_package_names),
         type_checking_blocks,
     )
     f8io_visitor.visit(tree)
